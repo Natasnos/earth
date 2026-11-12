@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TERRA // COSMOS — 3D Earth, Solar System & Galaxy Telemetry Explorer</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet CSS & JS for Interactive Satellite Slippy Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #02040a;
+      font-family: 'Space Grotesk', sans-serif;
+      color: #f8fafc;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
+
+    .font-mono-tech {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .glass-panel {
+      background: rgba(8, 13, 26, 0.78);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(56, 189, 248, 0.22);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    /* Custom Range Slider */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 6px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #10b981 0%, #38bdf8 35%, #f59e0b 68%, #a855f7 100%);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #f8fafc;
+      border: 3px solid #38bdf8;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.9);
+      margin-top: -6px;
+      transition: transform 0.15s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.18);
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.4);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(56, 189, 248, 0.35);
+      border-radius: 999px;
+    }
+
+    /* Leaflet dark glass overrides */
+    .leaflet-container {
+      background: #040814 !important;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .leaflet-control-attribution {
+      background: rgba(2, 6, 23, 0.7) !important;
+      color: #94a3b8 !important;
+      font-size: 9px !important;
+    }
+    .leaflet-control-attribution a {
+      color: #38bdf8 !important;
+    }
+
+    /* 3D Floating Marker Label */
+    .world-label {
+      position: absolute;
+      transform: translate(-50%, -135%);
+      pointer-events: auto;
+      cursor: pointer;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 10;
+    }
+    .world-label:hover {
+      transform: translate(-50%, -145%) scale(1.06);
+      z-index: 25;
+    }
+  </style>
+</head>
+<body class="relative select-none">
+
+  <!-- 3D WebGL Canvas -->
+  <div id="canvas-container"></div>
+
+  <!-- Dynamic 3D Projected HTML Pins Container -->
+  <div id="labels-container" class="fixed inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+  <!-- TOP NAVIGATION & GLOBAL ADDRESS GEOCODER HUD -->
+  <header class="fixed top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+    <!-- Brand & Scale Telemetry -->
+    <div class="glass-panel rounded-2xl px-4 py-2.5 flex items-center gap-3.5 pointer-events-auto">
+      <div class="relative flex items-center justify-center w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-400/30">
+        <span class="w-2.5 h-2.5 rounded-full bg-sky-400 animate-ping absolute"></span>
+        <span class="w-2.5 h-2.5 rounded-full bg-sky-400 relative"></span>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm font-bold tracking-wider uppercase text-white">TERRA // COSMOS</h1>
+          <span id="regime-badge" class="text-[10px] font-mono-tech uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+            PLANETARY ORBIT
+          </span>
+        </div>
+        <p id="altitude-readout" class="text-[11px] font-mono-tech text-slate-300">
+          ALTITUDE: 14,200 KM • SCALE: 1.0x
+        </p>
+      </div>
+    </div>
+
+    <!-- Global Address & Coordinate Search Bar -->
+    <div class="relative pointer-events-auto flex-1 max-w-md min-w-[260px]">
+      <form id="global-address-form" class="glass-panel rounded-2xl px-3 py-1.5 flex items-center gap-2 border border-sky-400/30 focus-within:border-emerald-400/70 transition">
+        <svg class="w-4 h-4 text-sky-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <input
+          id="address-search-input"
+          type="text"
+          autocomplete="off"
+          placeholder="Enter any street address, city, or lat, lon..."
+          class="w-full bg-transparent text-xs text-white placeholder-slate-400 focus:outline-none font-mono-tech"
+        />
+        <button
+          type="submit"
+          class="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-300 border border-emerald-400/30 text-[10px] font-mono-tech uppercase tracking-wider shrink-0 transition"
+        >
+          FLY TO
+        </button>
+      </form>
+      <!-- Autocomplete Dropdown -->
+      <div id="search-results-dropdown" class="hidden absolute left-0 right-0 mt-1.5 glass-panel rounded-xl overflow-hidden z-50 divide-y divide-slate-800/80 max-h-60 overflow-y-auto"></div>
+    </div>
+
+    <!-- Scale Preset Switchers & Live Orbital Controls -->
+    <div class="glass-panel rounded-2xl p-1.5 flex flex-wrap items-center gap-1 pointer-events-auto">
+      <button onclick="setZoomPreset('surface')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-medium hover:bg-white/10 transition text-emerald-300">
+        Surface
+      </button>
+      <button onclick="setZoomPreset('orbit')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-medium hover:bg-white/10 transition text-sky-300">
+        Earth Orbit
+      </button>
+      <button onclick="setZoomPreset('moon')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-medium hover:bg-white/10 transition text-indigo-300">
+        Lunar
+      </button>
+      <button onclick="setZoomPreset('solarsystem')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-medium hover:bg-white/10 transition text-amber-300">
+        Solar System
+      </button>
+      <button onclick="setZoomPreset('galaxy')" class="px-2.5 py-1.5 rounded-xl text-[11px] font-medium hover:bg-white/10 transition text-purple-300">
+        Milky Way
+      </button>
+      <div class="h-4 w-[1px] bg-slate-700 mx-0.5"></div>
+      <button id="iss-lock-btn" onclick="toggleISSCockpit()" class="px-2.5 py-1.5 rounded-xl text-[10px] font-mono-tech uppercase bg-sky-500/15 hover:bg-sky-500/30 text-sky-300 border border-sky-400/30 transition">
+        LOCK ISS
+      </button>
+      <button id="swarm-toggle-btn" onclick="toggleSwarmLayer()" class="px-2.5 py-1.5 rounded-xl text-[10px] font-mono-tech uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 transition" title="Toggle 144 Starlink + GPS Satellite Swarm">
+        SWARM (144)
+      </button>
+      <button id="terminator-toggle-btn" onclick="toggleTerminatorRing()" class="px-2.5 py-1.5 rounded-xl text-[10px] font-mono-tech uppercase bg-amber-500/20 text-amber-300 border border-amber-400/30 transition" title="Toggle Solar Day/Night Terminator Ring">
+        TERM
+      </button>
+    </div>
+  </header>
+
+  <!-- LEFT TELEMETRY & EXPLORER DOCK -->
+  <aside class="fixed top-20 left-3 bottom-24 w-72 z-20 flex flex-col gap-2.5 pointer-events-none">
+    <!-- Live ISS & Astronomical Status Card -->
+    <div class="glass-panel rounded-2xl p-3 pointer-events-auto">
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="text-[10px] font-mono-tech uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          ISS LIVE TELEMETRY (LEO)
+        </span>
+        <button onclick="flyToISS()" class="text-[10px] font-mono-tech text-sky-300 hover:underline">TRACK →</button>
+      </div>
+      <div class="grid grid-cols-2 gap-1.5 text-[11px] font-mono-tech bg-slate-900/65 rounded-xl p-2 border border-slate-800">
+        <div>
+          <span class="text-slate-400 text-[9px] block">LAT / LON</span>
+          <span id="iss-coords" class="text-white font-semibold">--° / --°</span>
+        </div>
+        <div>
+          <span class="text-slate-400 text-[9px] block">ALT / VELOCITY</span>
+          <span id="iss-vel" class="text-emerald-300">418 km • 27,600 km/h</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Multi-Tab Directory: Landmarks | Live Quakes | Solar & Deep Cosmos -->
+    <div class="glass-panel rounded-2xl p-3 flex-1 flex flex-col overflow-hidden pointer-events-auto">
+      <!-- Tabs -->
+      <div class="grid grid-cols-3 gap-1 bg-slate-900/80 p-1 rounded-xl mb-2.5 border border-slate-800">
+        <button id="tab-landmarks" onclick="switchDirectoryTab('landmarks')" class="py-1 rounded-lg text-[10px] font-mono-tech uppercase bg-sky-500/25 text-sky-300 border border-sky-400/30">
+          Earth Pins
+        </button>
+        <button id="tab-quakes" onclick="switchDirectoryTab('quakes')" class="py-1 rounded-lg text-[10px] font-mono-tech uppercase text-slate-400 hover:text-white">
+          Quakes
+        </button>
+        <button id="tab-cosmos" onclick="switchDirectoryTab('cosmos')" class="py-1 rounded-lg text-[10px] font-mono-tech uppercase text-slate-400 hover:text-white">
+          Cosmos
+        </button>
+      </div>
+
+      <!-- Scrollable List Container -->
+      <div id="directory-list" class="flex-1 overflow-y-auto space-y-1.5 pr-1"></div>
+    </div>
+  </aside>
+
+  <!-- RIGHT SATELLITE & METEOROLOGY INSPECTOR DRAWER -->
+  <aside id="inspector-drawer" class="fixed top-20 right-3 bottom-24 w-96 z-20 glass-panel rounded-2xl p-4 flex flex-col gap-3 transition-transform duration-300 translate-x-[110%] pointer-events-auto">
+    <!-- Header -->
+    <div class="flex items-start justify-between gap-2 border-b border-slate-800 pb-2.5">
+      <div>
+        <span id="inspector-category" class="text-[10px] font-mono-tech uppercase px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/30">
+          SURFACE TARGET
+        </span>
+        <h2 id="inspector-title" class="text-base font-bold text-white mt-1 leading-snug">Select a Location</h2>
+        <p id="inspector-coords" class="text-[11px] font-mono-tech text-slate-400">0.0000° N, 0.0000° E</p>
+      </div>
+      <button onclick="closeInspector()" class="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300">
+        ✕
+      </button>
+    </div>
+
+    <!-- Live Surface Meteorology Card (Open-Meteo API) -->
+    <div id="weather-card" class="bg-slate-900/75 border border-sky-500/25 rounded-xl p-2.5">
+      <div class="flex items-center justify-between mb-1">
+        <span class="text-[10px] font-mono-tech uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+          LIVE SURFACE METEOROLOGY
+        </span>
+        <span id="weather-condition-badge" class="text-[10px] font-mono-tech px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-200">
+          SCANNING...
+        </span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-xs font-mono-tech mt-1">
+        <div class="bg-slate-950/60 p-1.5 rounded-lg">
+          <span class="text-[9px] text-slate-400 block">TEMP</span>
+          <span id="weather-temp" class="text-sm font-bold text-white">--°C</span>
+        </div>
+        <div class="bg-slate-950/60 p-1.5 rounded-lg">
+          <span class="text-[9px] text-slate-400 block">WIND VECTOR</span>
+          <span id="weather-wind" class="text-xs font-semibold text-sky-300">-- km/h</span>
+        </div>
+        <div class="bg-slate-950/60 p-1.5 rounded-lg">
+          <span class="text-[9px] text-slate-400 block">HUMIDITY / SKY</span>
+          <span id="weather-humidity" class="text-xs font-semibold text-amber-300">--%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interactive Leaflet Esri World Imagery OR Deep Space Preview -->
+    <div class="relative flex-1 rounded-xl overflow-hidden border border-slate-700/80 bg-slate-950 min-h-[190px]">
+      <div id="leaflet-map" class="w-full h-full"></div>
+      <!-- Deep Space Image Overlay (Shown for Solar System / Galaxy objects) -->
+      <div id="cosmos-preview-card" class="hidden absolute inset-0 bg-slate-950 flex flex-col justify-between p-4 bg-cover bg-center">
+        <div class="bg-slate-950/80 backdrop-blur-md p-2.5 rounded-xl border border-purple-400/30">
+          <p class="text-[10px] font-mono-tech uppercase text-purple-300">DEEP SPACE OBSERVATORY TELEMETRY</p>
+          <p id="cosmos-distance-stat" class="text-xs font-mono-tech text-white mt-0.5">Distance: --</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Description -->
+    <p id="inspector-desc" class="text-xs text-slate-300 leading-relaxed"></p>
+
+    <!-- External Google Earth 3D & Street View Actions -->
+    <div id="earth-links-row" class="grid grid-cols-2 gap-2 pt-1">
+      <a id="google-earth-link" href="#" target="_blank" rel="noopener noreferrer"
+         class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-sky-500/20 hover:bg-sky-500/35 text-sky-300 border border-sky-400/30 text-xs font-medium transition">
+        <span>🌍 Open Google Earth 3D</span>
+      </a>
+      <a id="google-maps-link" href="#" target="_blank" rel="noopener noreferrer"
+         class="flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-300 border border-emerald-400/30 text-xs font-medium transition">
+        <span>📍 Street & Map View</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- BOTTOM CONTINUOUS LOGARITHMIC ZOOM & SOLAR TIME SCRUBBER HUD -->
+  <footer class="fixed bottom-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-3 pointer-events-none">
+    <!-- Continuous Zoom Scrubber -->
+    <div class="glass-panel rounded-2xl px-4 py-2.5 flex-1 min-w-[280px] flex items-center gap-4 pointer-events-auto">
+      <div class="shrink-0">
+        <span class="text-[10px] font-mono-tech uppercase text-slate-400 block">CONTINUOUS SCALE</span>
+        <span class="text-xs font-semibold text-sky-300">Surface → Solar → Galaxy</span>
+      </div>
+      <input id="zoom-slider" type="range" min="0" max="1000" value="160" class="w-full" />
+      <button id="spin-toggle-btn" onclick="toggleSpin()" class="px-3 py-1 rounded-xl bg-sky-500/20 text-sky-300 border border-sky-400/30 text-[11px] font-mono-tech shrink-0">
+        SPIN: ON
+      </button>
+    </div>
+
+    <!-- Real-Time Astronomical UTC Solar Terminator Scrubber -->
+    <div class="glass-panel rounded-2xl px-4 py-2.5 flex items-center gap-3 pointer-events-auto">
+      <div>
+        <span class="text-[10px] font-mono-tech uppercase text-amber-300 block">SOLAR TERMINATOR UTC</span>
+        <span id="utc-clock-readout" class="text-xs font-mono-tech text-white">SYNCED LIVE</span>
+      </div>
+      <input id="utc-offset-slider" type="range" min="-720" max="720" value="0" class="w-28" title="Scrub +/- 12 Hours Solar Time" />
+      <button onclick="resetUTCTime()" class="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 text-amber-300 border border-amber-400/30 text-[10px] font-mono-tech">
+        NOW
+      </button>
+    </div>
+  </footer>
+
+  <!-- Three.js & OrbitControls via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+  <script>
+    // ============================================================================
+    // 1. CURATED EARTH LANDMARKS, SOLAR SYSTEM PLANETS & DEEP-SPACE OBJECTS
+    // ============================================================================
+    const EARTH_LANDMARKS = [
+      { id: 'grand-canyon', name: 'Grand Canyon, USA', lat: 36.0544, lon: -112.1401, zoom: 13, category: 'Geological Wonder', desc: 'Mile-deep gorge carved by the Colorado River exposing nearly two billion years of Earth geological history.' },
+      { id: 'giza', name: 'Pyramids of Giza, Egypt', lat: 29.9792, lon: 31.1342, zoom: 16, category: 'Ancient Monument', desc: 'Iconic Fourth Dynasty necropolis on the Giza Plateau outside Cairo, clearly visible from orbital reconnaissance.' },
+      { id: 'everest', name: 'Mount Everest, Himalayas', lat: 27.9881, lon: 86.9250, zoom: 13, category: 'Highest Peak (8,849m)', desc: 'Earth’s highest mountain above sea level, located in the Mahalangur Himal sub-range of the Himalayas.' },
+      { id: 'tokyo', name: 'Tokyo Metropolis, Japan', lat: 35.6762, lon: 139.6503, zoom: 15, category: 'Megacity Hub', desc: 'Vibrant coastal megacity along Tokyo Bay producing one of the brightest nocturnal light signatures on Earth.' },
+      { id: 'richat', name: 'Eye of the Sahara, Mauritania', lat: 21.1240, lon: -11.4020, zoom: 12, category: 'Orbital Landmark', desc: 'The Richat Structure: a 40-kilometer concentric geological dome used as a visual reference by astronauts since Gemini.' },
+      { id: 'bora-bora', name: 'Bora Bora Atoll, French Polynesia', lat: -16.5004, lon: -151.7415, zoom: 13, category: 'Coral Reef Lagoon', desc: 'Volcanic remnant island surrounded by a barrier reef and turquoise lagoon in the South Pacific.' },
+      { id: 'venice', name: 'Venetian Lagoon, Italy', lat: 45.4408, lon: 12.3155, zoom: 15, category: 'Historic Maritime City', desc: 'Archipelago of 118 islands linked by over 400 bridges inside a crescent-shaped Adriatic lagoon.' }
+    ];
+
+    const COSMOS_TARGETS = [
+      { id: 'sun', name: 'Sol (The Sun)', type: 'Star (G2V Main Sequence)', distText: '1.00 AU (149.6M km)', desc: 'Our solar system’s central star containing 99.86% of the system’s mass, driving Earth’s climate and space weather.', radius: 115, color: '#f59e0b' },
+      { id: 'mars', name: 'Mars (The Red Planet)', type: 'Terrestrial Planet', distText: '1.52 AU from Sun', desc: 'Home to Olympus Mons and Valles Marineris; target of active rovers Perseverance and Curiosity.', radius: 145, color: '#ef4444' },
+      { id: 'jupiter', name: 'Jupiter (Gas Giant)', type: 'Jovian Planet', distText: '5.20 AU from Sun', desc: 'Largest planet in our Solar System with turbulent ammonia cloud bands and the Great Red Spot anticyclone.', radius: 175, color: '#eab308' },
+      { id: 'saturn', name: 'Saturn & Ring System', type: 'Ringed Gas Giant', distText: '9.58 AU from Sun', desc: 'Adorned with a dazzling system of icy rings extending 282,000 km across space.', radius: 210, color: '#fde047' },
+      { id: 'sgr-a', name: 'Sagittarius A* (Galactic Core)', type: 'Supermassive Black Hole', distText: '26,670 Light-Years', desc: 'A 4.15-million-solar-mass black hole anchoring the gravitational center of the Milky Way galaxy.', pos: [0, 0, -900], color: '#f472b6' },
+      { id: 'pillars', name: 'Pillars of Creation (M16)', type: 'Star-Forming Nebula', distText: '6,500 Light-Years', desc: 'Towering trunks of interstellar gas and dust in the Eagle Nebula imaged in infrared by JWST.', pos: [420, 45, -620], color: '#a855f7' },
+      { id: 'orion', name: 'Orion Nebula (M42)', type: 'Diffuse Emission Nebula', distText: '1,344 Light-Years', desc: 'The closest massive star-forming nursery to Earth, visible to the naked eye in Orion’s Sword.', pos: [-340, -35, -480], color: '#38bdf8' },
+      { id: 'alpha-cen', name: 'Alpha Centauri System', type: 'Triple Star System', distText: '4.37 Light-Years', desc: 'Closest stellar neighbor to our Sun, hosting the rocky exoplanet candidate Proxima Centauri b.', pos: [190, 25, -290], color: '#34d399' }
+    ];
+
+    // ============================================================================
+    // 2. THREE.JS SCENE, CAMERA, RENDERER & CONTROLS
+    // ============================================================================
+    const container = document.getElementById('canvas-container');
+    const labelsContainer = document.getElementById('labels-container');
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 15000);
+    camera.position.set(0, 6, 26);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.enablePan = false;
+    controls.minDistance = 10.6;
+    controls.maxDistance = 2600;
+
+    // ============================================================================
+    // 3. EARTH GLOBE WITH DAY/NIGHT TERMINATOR, SPECULAR & CLOUDS
+    // ============================================================================
+    const EARTH_RADIUS = 10;
+    const earthGroup = new THREE.Group();
+    scene.add(earthGroup);
+
+    const texLoader = new THREE.TextureLoader();
+    texLoader.setCrossOrigin('anonymous');
+
+    const dayTex = texLoader.load('https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg');
+    const nightTex = texLoader.load('https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg');
+    const topoTex = texLoader.load('https://unpkg.com/three-globe@2.31.0/example/img/earth-topology.png');
+    const waterTex = texLoader.load('https://unpkg.com/three-globe@2.31.0/example/img/earth-water.png');
+
+    const sunDirection = new THREE.Vector3(1, 0.15, 0.4).normalize();
+
+    const earthUniforms = {
+      dayTexture: { value: dayTex },
+      nightTexture: { value: nightTex },
+      waterTexture: { value: waterTex },
+      sunDir: { value: sunDirection }
+    };
+
+    const earthMaterial = new THREE.ShaderMaterial({
+      uniforms: earthUniforms,
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vNormalWorld;
+        varying vec3 vWorldPos;
+        void main() {
+          vUv = uv;
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPos = worldPosition.xyz;
+          vNormalWorld = normalize(mat3(modelMatrix) * normal);
+          gl_Position = projectionMatrix * viewMatrix * worldPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D dayTexture;
+        uniform sampler2D nightTexture;
+        uniform sampler2D waterTexture;
+        uniform vec3 sunDir;
+        varying vec2 vUv;
+        varying vec3 vNormalWorld;
+        varying vec3 vWorldPos;
+
+        void main() {
+          vec3 normal = normalize(vNormalWorld);
+          float sunDot = dot(normal, normalize(sunDir));
+          float dayMix = smoothstep(-0.18, 0.22, sunDot);
+
+          vec3 dayColor = texture2D(dayTexture, vUv).rgb;
+          vec3 nightColor = texture2D(nightTexture, vUv).rgb * vec3(1.35, 1.1, 0.8) * 1.6;
+          float waterMask = texture2D(waterTexture, vUv).r;
+
+          // Specular ocean glint
+          vec3 viewDir = normalize(cameraPosition - vWorldPos);
+          vec3 reflectDir = reflect(-normalize(sunDir), normal);
+          float spec = pow(max(dot(viewDir, reflectDir), 0.0), 28.0) * waterMask * max(sunDot, 0.0);
+
+          // Sunset twilight rim along terminator
+          float twilight = smoothstep(-0.22, 0.0, sunDot) * (1.0 - smoothstep(0.0, 0.25, sunDot));
+          vec3 twilightCol = vec3(0.95, 0.38, 0.12) * twilight * 0.55;
+
+          // Fresnel atmospheric edge
+          float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 3.2);
+          vec3 atmosRim = vec3(0.22, 0.65, 1.0) * fresnel * smoothstep(-0.35, 0.4, sunDot);
+
+          vec3 finalColor = mix(nightColor, dayColor + vec3(1.0, 0.92, 0.78) * spec * 0.65, dayMix) + twilightCol + atmosRim;
+          gl_FragColor = vec4(finalColor, 1.0);
+        }
+      `
+    });
+
+    const earthMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS, 96, 96), earthMaterial);
+    earthGroup.add(earthMesh);
+
+    // Outer Atmospheric Halo
+    const haloMat = new THREE.ShaderMaterial({
+      transparent: true,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending,
+      vertexShader: `
+        varying vec3 vNormal;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vNormal;
+        void main() {
+          float intensity = pow(0.62 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.8);
+          gl_FragColor = vec4(0.22, 0.68, 1.0, 1.0) * intensity * 0.85;
+        }
+      `
+    });
+    const haloMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS * 1.12, 64, 64), haloMat);
+    scene.add(haloMesh);
+
+    // 3D Solar Terminator Ring
+    const terminatorGeo = new THREE.RingGeometry(EARTH_RADIUS * 1.006, EARTH_RADIUS * 1.018, 128);
+    const terminatorMat = new THREE.MeshBasicMaterial({
+      color: 0xf59e0b,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.75
+    });
+    const terminatorRing = new THREE.Mesh(terminatorGeo, terminatorMat);
+    scene.add(terminatorRing);
+    let showTerminator = true;
+
+    // ============================================================================
+    // 4. 3D MARKERS, CUSTOM ADDRESS BEACON, WIND VECTORS & EARTHQUAKES
+    // ============================================================================
+    const markersGroup = new THREE.Group();
+    earthGroup.add(markersGroup);
+
+    const quakesGroup = new THREE.Group();
+    earthGroup.add(quakesGroup);
+
+    function latLonToVector3(lat, lon, radius = EARTH_RADIUS) {
+      const phi = (90 - lat) * (Math.PI / 180);
+      const theta = (lon + 180) * (Math.PI / 180);
+      return new THREE.Vector3(
+        -radius * Math.sin(phi) * Math.cos(theta),
+        radius * Math.cos(phi),
+        radius * Math.sin(phi) * Math.sin(theta)
+      );
+    }
+
+    const landmarkMeshes = [];
+    EARTH_LANDMARKS.forEach((loc) => {
+      const pos = latLonToVector3(loc.lat, loc.lon, EARTH_RADIUS * 1.008);
+      const pinGeo = new THREE.SphereGeometry(0.16, 16, 16);
+      const pinMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+      const pin = new THREE.Mesh(pinGeo, pinMat);
+      pin.position.copy(pos);
+      pin.userData = { type: 'landmark', data: loc };
+      markersGroup.add(pin);
+      landmarkMeshes.push(pin);
+    });
+
+    // Emerald Custom Searched Address Beacon & 3D Wind Vector Ring
+    const addressBeacon = new THREE.Group();
+    addressBeacon.visible = false;
+    const beaconSphere = new THREE.Mesh(
+      new THREE.SphereGeometry(0.21, 20, 20),
+      new THREE.MeshBasicMaterial({ color: 0x10b981 })
+    );
+    const windRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.28, 0.45, 32),
+      new THREE.MeshBasicMaterial({ color: 0x34d399, side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
+    );
+    addressBeacon.add(beaconSphere);
+    addressBeacon.add(windRing);
+    earthGroup.add(addressBeacon);
+    let currentWindSpeed = 12;
+
+    // ============================================================================
+    // 5. LIVE ISS TRACKER + 144-SATELLITE STARLINK/GPS CONSTELLATION SWARM
+    // ============================================================================
+    const issGroup = new THREE.Group();
+    const issCore = new THREE.Mesh(
+      new THREE.BoxGeometry(0.25, 0.12, 0.12),
+      new THREE.MeshBasicMaterial({ color: 0xffffff })
+    );
+    const issSolarWing = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.75, 0.22),
+      new THREE.MeshBasicMaterial({ color: 0xf59e0b })
+    );
+    issGroup.add(issCore, issSolarWing);
+    earthGroup.add(issGroup);
+
+    let issState = { lat: 18.4, lon: -66.1, alt: 418, vel: 27580 };
+    let issCockpitLocked = false;
+
+    async function fetchLiveISSTelemetry() {
+      try {
+        const res = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
+        if (!res.ok) throw new Error('ISS fallback');
+        const data = await res.json();
+        issState.lat = data.latitude;
+        issState.lon = data.longitude;
+        issState.alt = Math.round(data.altitude);
+        issState.vel = Math.round(data.velocity);
+      } catch (e) {
+        // Smooth orbital propagation fallback
+        issState.lon = ((issState.lon + 2.2 + 180) % 360) - 180;
+        issState.lat = 51.6 * Math.sin(Date.now() * 0.0002);
+      }
+      document.getElementById('iss-coords').textContent = `${issState.lat.toFixed(2)}° / ${issState.lon.toFixed(2)}°`;
+      document.getElementById('iss-vel').textContent = `${issState.alt} km • ${issState.vel.toLocaleString()} km/h`;
+      const pos = latLonToVector3(issState.lat, issState.lon, EARTH_RADIUS * 1.075);
+      issGroup.position.copy(pos);
+      issGroup.lookAt(new THREE.Vector3(0, 0, 0));
+    }
+    fetchLiveISSTelemetry();
+    setInterval(fetchLiveISSTelemetry, 4000);
+
+    // 144-Satellite Constellation Swarm (120 LEO Starlink + 24 MEO GPS)
+    const swarmGroup = new THREE.Group();
+    earthGroup.add(swarmGroup);
+    const swarmOrbits = [];
+    for (let i = 0; i < 144; i++) {
+      const isGPS = i >= 120;
+      const radius = isGPS ? EARTH_RADIUS * 1.42 : EARTH_RADIUS * 1.055;
+      const inclination = (isGPS ? 55 : 53) * (Math.PI / 180);
+      const raan = ((i % 6) / 6) * Math.PI * 2;
+      const phase = (i / (isGPS ? 24 : 120)) * Math.PI * 2;
+      const speed = isGPS ? 0.0025 : 0.0085;
+      const satMesh = new THREE.Mesh(
+        new THREE.SphereGeometry(isGPS ? 0.09 : 0.055, 8, 8),
+        new THREE.MeshBasicMaterial({ color: isGPS ? 0xfbbf24 : 0x38bdf8 })
+      );
+      swarmGroup.add(satMesh);
+      swarmOrbits.push({ mesh: satMesh, radius, inclination, raan, phase, speed });
+    }
+    let showSwarm = true;
+
+    // ============================================================================
+    // 6. ORBITING MOON, INTERMEDIATE SOLAR SYSTEM & 75,000-STAR MILKY WAY
+    // ============================================================================
+    const moonMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(1.8, 32, 32),
+      new THREE.MeshBasicMaterial({ color: 0xcbd5e1 })
+    );
+    scene.add(moonMesh);
+
+    // Solar System Group (Sun + Planets)
+    const solarSystemGroup = new THREE.Group();
+    scene.add(solarSystemGroup);
+
+    const sunSphere = new THREE.Mesh(
+      new THREE.SphereGeometry(9.5, 48, 48),
+      new THREE.MeshBasicMaterial({ color: 0xf59e0b })
+    );
+    sunSphere.position.set(115, 0, 0);
+    solarSystemGroup.add(sunSphere);
+
+    // Milky Way 75,000-Star Spiral Galaxy Particle System
+    const STAR_COUNT = 75000;
+    const galaxyGeo = new THREE.BufferGeometry();
+    const positions = new Float32Array(STAR_COUNT * 3);
+    const colors = new Float32Array(STAR_COUNT * 3);
+
+    const coreColor = new THREE.Color('#fde68a');
+    const armColor = new THREE.Color('#38bdf8');
+    const outerColor = new THREE.Color('#a855f7');
+
+    for (let i = 0; i < STAR_COUNT; i++) {
+      const i3 = i * 3;
+      const r = Math.pow(Math.random(), 1.55) * 1850 + 80;
+      const branchAngle = ((i % 4) / 4) * Math.PI * 2;
+      const spinAngle = r * 0.0042;
+      const randX = (Math.random() - 0.5) * 140;
+      const randY = (Math.random() - 0.5) * (75 * (1 - r / 2000));
+      const randZ = (Math.random() - 0.5) * 140;
+
+      positions[i3] = Math.cos(branchAngle + spinAngle) * r + randX;
+      positions[i3 + 1] = randY;
+      positions[i3 + 2] = Math.sin(branchAngle + spinAngle) * r - 900 + randZ;
+
+      const mixed = coreColor.clone().lerp(armColor, Math.min(1, r / 700)).lerp(outerColor, Math.min(1, r / 1700));
+      colors[i3] = mixed.r;
+      colors[i3 + 1] = mixed.g;
+      colors[i3 + 2] = mixed.b;
+    }
+
+    galaxyGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    galaxyGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const galaxyMat = new THREE.PointsMaterial({
+      size: 2.4,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const galaxyPoints = new THREE.Points(galaxyGeo, galaxyMat);
+    scene.add(galaxyPoints);
+
+    // ============================================================================
+    // 7. LEAFLET SATELLITE MAP & LIVE OPEN-METEO WEATHER TELEMETRY
+    // ============================================================================
+    let leafletMap = null;
+    let leafletMarker = null;
+
+    function initLeafletMap() {
+      leafletMap = L.map('leaflet-map', { zoomControl: true }).setView([36.0544, -112.1401], 13);
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+        attribution: 'Esri World Imagery'
+      }).addTo(leafletMap);
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19
+      }).addTo(leafletMap);
+      leafletMarker = L.circleMarker([36.0544, -112.1401], {
+        radius: 8,
+        color: '#10b981',
+        weight: 2,
+        fillColor: '#38bdf8',
+        fillOpacity: 0.7
+      }).addTo(leafletMap);
+    }
+    initLeafletMap();
+
+    const WMO_CODES = {
+      0: 'Clear Sky', 1: 'Mainly Clear', 2: 'Partly Cloudy', 3: 'Overcast',
+      45: 'Foggy', 51: 'Light Drizzle', 61: 'Rain', 71: 'Snowfall', 95: 'Thunderstorm'
+    };
+
+    async function fetchSurfaceWeather(lat, lon) {
+      document.getElementById('weather-condition-badge').textContent = 'POLLING METEO...';
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const cur = data.current;
+        const c = cur.temperature_2m;
+        const f = (c * 9 / 5 + 32).toFixed(1);
+        currentWindSpeed = cur.wind_speed_10m || 10;
+
+        document.getElementById('weather-temp').textContent = `${c}°C / ${f}°F`;
+        document.getElementById('weather-wind').textContent = `${cur.wind_speed_10m} km/h (${cur.wind_direction_10m}°)`;
+        document.getElementById('weather-humidity').textContent = `${cur.relative_humidity_2m}% RH`;
+        document.getElementById('weather-condition-badge').textContent = WMO_CODES[cur.weather_code] || 'Active Meteo';
+      } catch (err) {
+        document.getElementById('weather-condition-badge').textContent = 'ORBITAL ESTIMATE';
+      }
+    }
+
+    // ============================================================================
+    // 8. CAMERA FLIGHT, GLOBAL ADDRESS GEOCODER & DIRECTORY TABS
+    // ============================================================================
+    let spinEnabled = true;
+    let cameraAnimation = null;
+
+    function flyToLatLon(lat, lon, title, category, desc, zoomLevel = 15, isCustomAddress = false) {
+      spinEnabled = false;
+      document.getElementById('spin-toggle-btn').textContent = 'SPIN: PAUSED';
+      issCockpitLocked = false;
+
+      const localTarget = latLonToVector3(lat, lon, EARTH_RADIUS * 1.01);
+      if (isCustomAddress) {
+        addressBeacon.position.copy(localTarget);
+        addressBeacon.lookAt(new THREE.Vector3(0, 0, 0));
+        addressBeacon.visible = true;
+      }
+
+      const worldTarget = localTarget.clone().applyMatrix4(earthGroup.matrixWorld);
+      const camEndPos = worldTarget.clone().normalize().multiplyScalar(14.5);
+
+      cameraAnimation = {
+        startPos: camera.position.clone(),
+        endPos: camEndPos,
+        startTarget: controls.target.clone(),
+        endTarget: new THREE.Vector3(0, 0, 0),
+        startTime: performance.now(),
+        duration: 1350
+      };
+
+      // Open Inspector Drawer
+      const drawer = document.getElementById('inspector-drawer');
+      drawer.classList.remove('translate-x-[110%]');
+      document.getElementById('weather-card').classList.remove('hidden');
+      document.getElementById('cosmos-preview-card').classList.add('hidden');
+      document.getElementById('earth-links-row').classList.remove('hidden');
+
+      document.getElementById('inspector-category').textContent = category;
+      document.getElementById('inspector-title').textContent = title;
+      document.getElementById('inspector-coords').textContent = `${lat.toFixed(4)}° N, ${lon.toFixed(4)}° E`;
+      document.getElementById('inspector-desc').textContent = desc;
+
+      document.getElementById('google-earth-link').href = `https://earth.google.com/web/@${lat},${lon},250a,1200d,35y,0h,45t,0r`;
+      document.getElementById('google-maps-link').href = `https://www.google.com/maps/@?api=1&map_action=map&center=${lat},${lon}&zoom=${zoomLevel}&basemap=satellite`;
+
+      setTimeout(() => {
+        leafletMap.invalidateSize();
+        leafletMap.setView([lat, lon], zoomLevel);
+        leafletMarker.setLatLng([lat, lon]);
+      }, 220);
+
+      fetchSurfaceWeather(lat, lon);
+    }
+
+    function closeInspector() {
+      document.getElementById('inspector-drawer').classList.add('translate-x-[110%]');
+    }
+
+    // Global Address Search Form (Nominatim Geocoder + Raw Coordinate Parser)
+    const addressForm = document.getElementById('global-address-form');
+    const addressInput = document.getElementById('address-search-input');
+    const searchDropdown = document.getElementById('search-results-dropdown');
+
+    addressForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const query = addressInput.value.trim();
+      if (!query) return;
+
+      // Check if raw lat, lon coordinates
+      const coordMatch = query.match(/^(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
+      if (coordMatch) {
+        const lat = parseFloat(coordMatch[1]);
+        const lon = parseFloat(coordMatch[3]);
+        searchDropdown.classList.add('hidden');
+        flyToLatLon(lat, lon, `Coordinates (${lat.toFixed(3)}, ${lon.toFixed(3)})`, 'DIRECT COORDINATE PIN', 'Direct geospatial telemetry lock.', 16, true);
+        return;
+      }
+
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`);
+        const results = await res.json();
+        if (results.length > 0) {
+          searchDropdown.innerHTML = '';
+          results.forEach((place) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'w-full text-left px-3 py-2 hover:bg-sky-500/20 text-xs text-slate-200 flex items-center justify-between gap-2 transition';
+            btn.innerHTML = `<span class="truncate">${place.display_name}</span><span class="text-[10px] font-mono-tech text-emerald-300 shrink-0">FLY →</span>`;
+            btn.onclick = () => {
+              searchDropdown.classList.add('hidden');
+              const lat = parseFloat(place.lat);
+              const lon = parseFloat(place.lon);
+              flyToLatLon(lat, lon, place.display_name.split(',')[0], 'GEOCODED ADDRESS TARGET', place.display_name, 17, true);
+            };
+            searchDropdown.appendChild(btn);
+          });
+          searchDropdown.classList.remove('hidden');
+          // Immediately fly to top hit as well
+          const top = results[0];
+          flyToLatLon(parseFloat(top.lat), parseFloat(top.lon), top.display_name.split(',')[0], 'GEOCODED ADDRESS TARGET', top.display_name, 17, true);
+        }
+      } catch (err) {
+        console.warn('Geocoding error:', err);
+      }
+    });
+
+    // Live USGS 24-Hour Earthquakes Feed
+    let liveQuakes = [];
+    async function loadLiveQuakes() {
+      try {
+        const res = await fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson');
+        const data = await res.json();
+        liveQuakes = data.features.slice(0, 25).map((f) => ({
+          id: f.id,
+          mag: f.properties.mag.toFixed(1),
+          place: f.properties.place,
+          lon: f.geometry.coordinates[0],
+          lat: f.geometry.coordinates[1],
+          depth: f.geometry.coordinates[2]
+        }));
+        liveQuakes.forEach((q) => {
+          const pos = latLonToVector3(q.lat, q.lon, EARTH_RADIUS * 1.006);
+          const ring = new THREE.Mesh(
+            new THREE.RingGeometry(0.12, 0.22, 24),
+            new THREE.MeshBasicMaterial({ color: q.mag >= 5 ? 0xef4444 : 0xf59e0b, side: THREE.DoubleSide })
+          );
+          ring.position.copy(pos);
+          ring.lookAt(new THREE.Vector3(0, 0, 0));
+          quakesGroup.add(ring);
+        });
+      } catch (e) {}
+    }
+    loadLiveQuakes();
+
+    // Directory Tab Switching
+    let currentTab = 'landmarks';
+    function switchDirectoryTab(tab) {
+      currentTab = tab;
+      ['landmarks', 'quakes', 'cosmos'].forEach((t) => {
+        const el = document.getElementById(`tab-${t}`);
+        el.className = t === tab
+          ? 'py-1 rounded-lg text-[10px] font-mono-tech uppercase bg-sky-500/25 text-sky-300 border border-sky-400/30'
+          : 'py-1 rounded-lg text-[10px] font-mono-tech uppercase text-slate-400 hover:text-white';
+      });
+      renderDirectoryList();
+    }
+
+    function renderDirectoryList() {
+      const list = document.getElementById('directory-list');
+      list.innerHTML = '';
+
+      if (currentTab === 'landmarks') {
+        EARTH_LANDMARKS.forEach((loc) => {
+          const card = document.createElement('button');
+          card.className = 'w-full text-left p-2.5 rounded-xl bg-slate-900/60 hover:bg-sky-500/15 border border-slate-800 hover:border-sky-400/40 transition block';
+          card.innerHTML = `
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-white">${loc.name}</span>
+              <span class="text-[9px] font-mono-tech text-sky-300">${loc.category}</span>
+            </div>
+            <p class="text-[10px] font-mono-tech text-slate-400 mt-0.5">${loc.lat.toFixed(2)}°, ${loc.lon.toFixed(2)}°</p>
+          `;
+          card.onclick = () => flyToLatLon(loc.lat, loc.lon, loc.name, loc.category, loc.desc, loc.zoom, false);
+          list.appendChild(card);
+        });
+      } else if (currentTab === 'quakes') {
+        liveQuakes.forEach((q) => {
+          const card = document.createElement('button');
+          card.className = 'w-full text-left p-2.5 rounded-xl bg-slate-900/60 hover:bg-amber-500/15 border border-slate-800 hover:border-amber-400/40 transition block';
+          card.innerHTML = `
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-white truncate pr-2">${q.place}</span>
+              <span class="text-[10px] font-mono-tech px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">M${q.mag}</span>
+            </div>
+            <p class="text-[10px] font-mono-tech text-slate-400 mt-0.5">Depth: ${q.depth} km</p>
+          `;
+          card.onclick = () => flyToLatLon(q.lat, q.lon, q.place, `LIVE SEISMIC EVENT (M${q.mag})`, `USGS real-time seismic event at ${q.depth} km depth.`, 12, false);
+          list.appendChild(card);
+        });
+      } else {
+        COSMOS_TARGETS.forEach((c) => {
+          const card = document.createElement('button');
+          card.className = 'w-full text-left p-2.5 rounded-xl bg-slate-900/60 hover:bg-purple-500/15 border border-slate-800 hover:border-purple-400/40 transition block';
+          card.innerHTML = `
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-semibold text-white">${c.name}</span>
+              <span class="text-[9px] font-mono-tech text-purple-300">${c.distText}</span>
+            </div>
+            <p class="text-[10px] text-slate-400 mt-0.5">${c.type}</p>
+          `;
+          card.onclick = () => {
+            setZoomPreset(c.pos ? 'galaxy' : 'solarsystem');
+            const drawer = document.getElementById('inspector-drawer');
+            drawer.classList.remove('translate-x-[110%]');
+            document.getElementById('weather-card').classList.add('hidden');
+            document.getElementById('earth-links-row').classList.add('hidden');
+            document.getElementById('cosmos-preview-card').classList.remove('hidden');
+            document.getElementById('inspector-category').textContent = c.type;
+            document.getElementById('inspector-title').textContent = c.name;
+            document.getElementById('inspector-coords').textContent = c.distText;
+            document.getElementById('cosmos-distance-stat').textContent = `Distance: ${c.distText}`;
+            document.getElementById('inspector-desc').textContent = c.desc;
+          };
+          list.appendChild(card);
+        });
+      }
+    }
+    renderDirectoryList();
+
+    // ============================================================================
+    // 9. ZOOM PRESETS, UTC SOLAR CLOCK & HUD TOGGLES
+    // ============================================================================
+    function setZoomPreset(mode) {
+      issCockpitLocked = false;
+      const distMap = { surface: 13.5, orbit: 26, moon: 68, solarsystem: 230, galaxy: 1350 };
+      const targetDist = distMap[mode] || 26;
+      const dir = camera.position.clone().normalize();
+      cameraAnimation = {
+        startPos: camera.position.clone(),
+        endPos: dir.multiplyScalar(targetDist),
+        startTarget: controls.target.clone(),
+        endTarget: new THREE.Vector3(0, 0, 0),
+        startTime: performance.now(),
+        duration: 1200
+      };
+    }
+
+    function toggleSpin() {
+      spinEnabled = !spinEnabled;
+      document.getElementById('spin-toggle-btn').textContent = spinEnabled ? 'SPIN: ON' : 'SPIN: PAUSED';
+    }
+
+    function toggleISSCockpit() {
+      issCockpitLocked = !issCockpitLocked;
+      document.getElementById('iss-lock-btn').classList.toggle('bg-emerald-500/30', issCockpitLocked);
+    }
+
+    function flyToISS() {
+      flyToLatLon(issState.lat, issState.lon, 'International Space Station (ISS)', 'ORBITAL SPACECRAFT', 'Low Earth Orbit research facility traveling at 27,600 km/h.', 6, false);
+    }
+
+    function toggleSwarmLayer() {
+      showSwarm = !showSwarm;
+      swarmGroup.visible = showSwarm;
+      document.getElementById('swarm-toggle-btn').style.opacity = showSwarm ? '1' : '0.45';
+    }
+
+    function toggleTerminatorRing() {
+      showTerminator = !showTerminator;
+      terminatorRing.visible = showTerminator;
+      document.getElementById('terminator-toggle-btn').style.opacity = showTerminator ? '1' : '0.45';
+    }
+
+    // Continuous Logarithmic Zoom Slider
+    const zoomSlider = document.getElementById('zoom-slider');
+    zoomSlider.addEventListener('input', () => {
+      issCockpitLocked = false;
+      const t = parseFloat(zoomSlider.value) / 1000;
+      const minD = 11.2;
+      const maxD = 2200;
+      const dist = minD * Math.pow(maxD / minD, t);
+      camera.position.normalize().multiplyScalar(dist);
+    });
+
+    // Real-Time Astronomical UTC Solar Terminator Calculation
+    let utcOffsetMinutes = 0;
+    const utcSlider = document.getElementById('utc-offset-slider');
+    utcSlider.addEventListener('input', () => {
+      utcOffsetMinutes = parseInt(utcSlider.value, 10);
+    });
+    function resetUTCTime() {
+      utcOffsetMinutes = 0;
+      utcSlider.value = 0;
+    }
+
+    function updateAstronomicalSun() {
+      const now = new Date(Date.now() + utcOffsetMinutes * 60000);
+      const hours = now.getUTCHours() + now.getUTCMinutes() / 60;
+      const gha = (hours - 12) * 15 * (Math.PI / 180);
+      sunDirection.set(Math.cos(gha), 0.18, Math.sin(gha)).normalize();
+      earthUniforms.sunDir.value.copy(sunDirection);
+      terminatorRing.lookAt(sunDirection);
+      document.getElementById('utc-clock-readout').textContent = now.toISOString().slice(11, 16) + ' UTC';
+    }
+
+    // ============================================================================
+    // 10. ANIMATION LOOP & RESPONSIVE RESIZE
+    // ============================================================================
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const elapsed = clock.getElapsedTime();
+
+      updateAstronomicalSun();
+
+      if (spinEnabled && !issCockpitLocked) {
+        earthGroup.rotation.y += 0.0012;
+      }
+
+      // Update 144 Starlink + GPS Satellite Swarm
+      swarmOrbits.forEach((sat) => {
+        const angle = sat.phase + elapsed * sat.speed * 18;
+        const x = sat.radius * (Math.cos(sat.raan) * Math.cos(angle) - Math.sin(sat.raan) * Math.sin(angle) * Math.cos(sat.inclination));
+        const y = sat.radius * (Math.sin(angle) * Math.sin(sat.inclination));
+        const z = sat.radius * (Math.sin(sat.raan) * Math.cos(angle) + Math.cos(sat.raan) * Math.sin(angle) * Math.cos(sat.inclination));
+        sat.mesh.position.set(x, y, z);
+      });
+
+      // Orbiting 3D Moon
+      const moonAngle = elapsed * 0.15;
+      moonMesh.position.set(Math.cos(moonAngle) * 52, Math.sin(moonAngle) * 6, Math.sin(moonAngle) * 52);
+
+      // Pulse custom address wind ring
+      if (addressBeacon.visible) {
+        const s = 1 + 0.35 * Math.sin(elapsed * (3 + currentWindSpeed * 0.15));
+        windRing.scale.set(s, s, 1);
+      }
+
+      // Smooth Camera Flight Interpolation
+      if (cameraAnimation) {
+        const t = Math.min(1, (performance.now() - cameraAnimation.startTime) / cameraAnimation.duration);
+        const ease = 1 - Math.pow(1 - t, 3);
+        camera.position.lerpVectors(cameraAnimation.startPos, cameraAnimation.endPos, ease);
+        controls.target.lerpVectors(cameraAnimation.startTarget, cameraAnimation.endTarget, ease);
+        if (t >= 1) cameraAnimation = null;
+      }
+
+      // ISS Cockpit Lock Mode
+      if (issCockpitLocked) {
+        const issWorld = new THREE.Vector3();
+        issGroup.getWorldPosition(issWorld);
+        const camPos = issWorld.clone().normalize().multiplyScalar(EARTH_RADIUS * 1.15);
+        camera.position.lerp(camPos, 0.08);
+        controls.target.set(0, 0, 0);
+      }
+
+      // Scale & Altitude Telemetry Readout
+      const dist = camera.position.length();
+      const badge = document.getElementById('regime-badge');
+      const readout = document.getElementById('altitude-readout');
+      if (dist < 40) {
+        const altKm = Math.max(120, Math.round((dist - EARTH_RADIUS) * 637));
+        badge.textContent = 'PLANETARY ORBIT';
+        readout.textContent = `ALTITUDE: ${altKm.toLocaleString()} KM • LEO/MEO`;
+      } else if (dist < 320) {
+        badge.textContent = 'SOLAR SYSTEM';
+        readout.textContent = `DISTANCE: ${(dist / 115).toFixed(2)} AU • HELIOCENTRIC`;
+      } else {
+        badge.textContent = 'MILKY WAY GALAXY';
+        readout.textContent = `SCALE: ${(dist * 24).toLocaleString()} LIGHT-YEARS`;
+      }
+
+      galaxyPoints.rotation.y = elapsed * 0.015;
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
