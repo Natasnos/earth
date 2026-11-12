@@ -1,0 +1,2676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TERRA // COSMOS — 3D Earth, Solar System, Exoplanets & Galaxy Explorer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS & JS for Interactive Satellite Slippy Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #02040a;
+            font-family: 'Space Grotesk', sans-serif;
+            color: #f8fafc;
+        }
+
+        #canvas-container {
+            position: fixed;
+            inset: 0;
+            z-index: 1;
+        }
+
+        .font-mono-tech {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .glass-panel {
+            background: rgba(8, 13, 26, 0.80);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(56, 189, 248, 0.22);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-button {
+            background: rgba(15, 23, 42, 0.72);
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            transition: all 0.18s ease;
+        }
+        .glass-button:hover {
+            background: rgba(56, 189, 248, 0.18);
+            border-color: rgba(56, 189, 248, 0.55);
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 6px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #10b981 0%, #38bdf8 35%, #f59e0b 68%, #a855f7 100%);
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #f8fafc;
+            border: 3px solid #38bdf8;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.9);
+            margin-top: -5px;
+            transition: transform 0.15s ease;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.18);
+        }
+
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.4);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(56, 189, 248, 0.35);
+            border-radius: 999px;
+        }
+
+        .leaflet-container {
+            background: #040814 !important;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        .leaflet-control-attribution {
+            background: rgba(2, 6, 23, 0.7) !important;
+            color: #94a3b8 !important;
+            font-size: 9px !important;
+        }
+        .leaflet-control-attribution a {
+            color: #38bdf8 !important;
+        }
+
+        .pin-label {
+            position: absolute;
+            transform: translate(-50%, -135%);
+            pointer-events: auto;
+            cursor: pointer;
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            z-index: 12;
+        }
+        .pin-label:hover {
+            transform: translate(-50%, -145%) scale(1.06);
+            z-index: 28;
+        }
+
+        @keyframes scanlineSweep {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        .scanline-sweep {
+            animation: scanlineSweep 1.1s linear infinite;
+        }
+    </style>
+</head>
+<body class="relative select-none">
+
+    <!-- 3D WebGL Canvas -->
+    <div id="canvas-container"></div>
+
+    <!-- Projected 3D Labels Container -->
+    <div id="pins-container" class="fixed inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+    <!-- TOP HUD: BRAND, REAL-TIME CLOCK, GLOBAL SEARCH & SCALE PRESETS -->
+    <header class="fixed top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+        <!-- Brand & Live Date/Time Clock -->
+        <div class="glass-panel rounded-2xl px-3.5 py-2 flex items-center gap-3 pointer-events-auto">
+            <div class="relative flex items-center justify-center w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-400/30 shrink-0">
+                <span class="w-2.5 h-2.5 rounded-full bg-sky-400 animate-ping absolute"></span>
+                <span class="w-2.5 h-2.5 rounded-full bg-sky-400 relative"></span>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-xs sm:text-sm font-bold tracking-wider uppercase text-white">TERRA // COSMOS</h1>
+                    <span id="regime-badge" class="text-[9px] font-mono-tech uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                        PLANETARY ORBIT
+                    </span>
+                </div>
+                <div class="flex items-center gap-2 text-[10px] font-mono-tech text-slate-300 mt-0.5">
+                    <span id="altitude-readout">ALT: 14,200 KM</span>
+                    <span class="text-slate-600">•</span>
+                    <span id="hud-live-clock" class="text-sky-300">--:--:-- LOCAL</span>
+                    <span class="text-slate-600 hidden md:inline">•</span>
+                    <span id="hud-utc-clock" class="text-amber-300 hidden md:inline">--:--:-- UTC</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Global Address, Landmark Name, Planet & Exoplanet Search Bar -->
+        <div class="relative pointer-events-auto flex-1 max-w-md min-w-[250px]">
+            <form id="global-address-form" class="glass-panel rounded-2xl px-3 py-1.5 flex items-center gap-2 border border-sky-400/30 focus-within:border-emerald-400/70 transition">
+                <svg class="w-4 h-4 text-sky-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <input
+                    id="address-search-input"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="Search any address, place name, planet, or exoplanet..."
+                    class="w-full bg-transparent text-xs text-white placeholder-slate-400 focus:outline-none font-mono-tech"
+                />
+                <span id="search-spinner" class="hidden w-3.5 h-3.5 border-2 border-sky-400 border-t-transparent rounded-full animate-spin shrink-0"></span>
+                <button
+                    type="button"
+                    id="clear-search-btn"
+                    onclick="clearAddressInput()"
+                    class="hidden text-slate-400 hover:text-white text-xs px-1"
+                    title="Clear search input"
+                >
+                    ✕
+                </button>
+                <button
+                    type="submit"
+                    class="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-300 border border-emerald-400/30 text-[10px] font-mono-tech uppercase tracking-wider shrink-0 transition"
+                >
+                    FLY TO
+                </button>
+            </form>
+            <div id="search-results-dropdown" class="hidden absolute left-0 right-0 mt-1.5 glass-panel rounded-xl overflow-hidden z-50 divide-y divide-slate-800/80 max-h-64 overflow-y-auto"></div>
+        </div>
+
+        <!-- Camera Scale Presets & Orbital Toggles -->
+        <div class="glass-panel rounded-2xl p-1.5 flex flex-wrap items-center gap-1 pointer-events-auto">
+            <button onclick="setCameraPreset('surface')" id="btn-surface" class="glass-button px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-200 flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span class="hidden sm:inline">Surface</span>
+            </button>
+            <button onclick="setCameraPreset('orbit')" id="btn-orbit" class="glass-button px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-200 flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+                <span class="hidden sm:inline">Orbit</span>
+            </button>
+            <button onclick="setCameraPreset('solar')" id="btn-solar" class="glass-button px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-200 flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-orange-400"></span>
+                <span class="hidden sm:inline">Solar System</span>
+            </button>
+            <button onclick="setCameraPreset('exoplanets')" id="btn-exoplanets" class="glass-button px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-200 flex items-center gap-1" title="Explore Newly Discovered Exoplanet Systems">
+                <span class="w-2 h-2 rounded-full bg-teal-400 animate-ping"></span>
+                <span class="hidden sm:inline">Exoplanets</span>
+            </button>
+            <button onclick="setCameraPreset('galaxy')" id="btn-galaxy" class="glass-button px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-200 flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                <span class="hidden sm:inline">Milky Way</span>
+            </button>
+            <div class="h-4 w-[1px] bg-slate-700/80 mx-0.5"></div>
+            <button id="realtime-rot-btn" onclick="toggleRealTimeRotationMode()" class="px-2.5 py-1.5 rounded-xl text-[10px] font-mono-tech uppercase bg-amber-500/20 text-amber-300 border border-amber-400/35 hover:bg-amber-500/35 transition" title="Toggle between Time-Lapse Orrery and 1:1 Real-Time Sidereal Rotation">
+                TIME-LAPSE ORRERY
+            </button>
+            <button id="bloom-toggle-btn" onclick="toggleBloomPass()" class="px-2 py-1.5 rounded-xl text-[10px] font-mono-tech uppercase bg-purple-500/25 text-purple-200 border border-purple-400/40 transition">
+                BLOOM
+            </button>
+        </div>
+    </header>
+
+    <!-- LEFT SIDEBAR: ISS LIVE TRACKER & 6-TAB EXPLORER -->
+    <aside class="fixed top-20 left-3 bottom-24 w-72 z-20 flex flex-col gap-2.5 pointer-events-none">
+        <!-- ISS Telemetry Card -->
+        <div class="glass-panel rounded-2xl p-3 pointer-events-auto">
+            <div class="flex items-center justify-between mb-1.5">
+                <span class="text-[10px] font-mono-tech uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    ISS LIVE ORBITAL TELEMETRY
+                </span>
+                <div class="flex items-center gap-1">
+                    <button onclick="flyToISS()" class="text-[9px] font-mono-tech px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 hover:bg-sky-500/35">FLY</button>
+                    <button id="iss-lock-btn" onclick="toggleISSCockpitLock()" class="text-[9px] font-mono-tech px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 hover:bg-sky-500/30">COCKPIT</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5 text-[11px] font-mono-tech bg-slate-900/65 rounded-xl p-2 border border-slate-800">
+                <div>
+                    <span class="text-slate-400 text-[9px] block">SUBPOINT</span>
+                    <span id="iss-coords" class="text-white font-semibold">--° / --°</span>
+                </div>
+                <div>
+                    <span class="text-slate-400 text-[9px] block">ALT / SPEED</span>
+                    <span id="iss-vel" class="text-emerald-300">418 km • 27,600 km/h</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6-Tab Explorer Panel -->
+        <div class="glass-panel rounded-2xl p-3 flex flex-col flex-1 pointer-events-auto overflow-hidden">
+            <div class="grid grid-cols-6 gap-1 p-1 bg-slate-950/80 rounded-xl border border-slate-800 mb-2.5">
+                <button onclick="switchSidebarTab('landmarks')" id="tab-landmarks" class="px-1 py-1.5 rounded-lg text-[8px] font-mono-tech font-bold uppercase tracking-wider bg-sky-500/25 text-sky-300 border border-sky-400/40 transition-all">
+                    Earth
+                </button>
+                <button onclick="switchSidebarTab('planets')" id="tab-planets" class="px-1 py-1.5 rounded-lg text-[8px] font-mono-tech font-bold uppercase tracking-wider text-slate-400 hover:text-slate-200 transition-all flex items-center justify-center gap-0.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-orange-400"></span>
+                    <span>Planets</span>
+                </button>
+                <button onclick="switchSidebarTab('exoplanets')" id="tab-exoplanets" class="px-1 py-1.5 rounded-lg text-[8px] font-mono-tech font-bold uppercase tracking-wider text-slate-400 hover:text-slate-200 transition-all flex items-center justify-center gap-0.5" title="Newly Discovered Exoplanets (JWST / TESS / Kepler)">
+                    <span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse"></span>
+                    <span>New</span>
+                </button>
+                <button onclick="switchSidebarTab('seismic')" id="tab-seismic" class="px-1 py-1.5 rounded-lg text-[8px] font-mono-tech font-bold uppercase tracking-wider text-slate-400 hover:text-slate-200 transition-all flex items-center justify-center gap-0.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+                    <span>Quakes</span>
+                </button>
+                <button onclick="switchSidebarTab('orbital')" id="tab-orbital" class="px-1 py-1.5 rounded-lg text-[8px] font-mono-tech font-bold uppercase tracking-wider text-slate-400 hover:text-slate-200 transition-all">
+                    Swarm
+                </button>
+                <button onclick="switchSidebarTab('cosmos')" id="tab-cosmos" class="px-1 py-1.5 rounded-lg text-[8px] font-mono-tech font-bold uppercase tracking-wider text-slate-400 hover:text-slate-200 transition-all flex items-center justify-center gap-0.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
+                    <span>Galaxy</span>
+                </button>
+            </div>
+
+            <!-- TAB 1: EARTH LANDMARKS & SEARCH HISTORY -->
+            <div id="panel-landmarks" class="flex-1 flex flex-col overflow-hidden">
+                <div id="landmarks-list" class="flex-1 overflow-y-auto space-y-1.5 pr-1"></div>
+            </div>
+
+            <!-- TAB 2: 8 PLANETS, SUN & MOONS -->
+            <div id="panel-planets" class="hidden flex-1 flex flex-col overflow-hidden">
+                <div id="planets-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+            </div>
+
+            <!-- TAB 3: NEWLY DISCOVERED EXOPLANETS (JWST / TESS / KEPLER) -->
+            <div id="panel-exoplanets" class="hidden flex-1 flex flex-col overflow-hidden">
+                <div id="exoplanets-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+            </div>
+
+            <!-- TAB 4: LIVE USGS EARTHQUAKES -->
+            <div id="panel-seismic" class="hidden flex-1 flex flex-col overflow-hidden">
+                <div id="seismic-list" class="flex-1 overflow-y-auto space-y-1.5 pr-1"></div>
+            </div>
+
+            <!-- TAB 5: STARLINK / GPS SATELLITE SWARM -->
+            <div id="panel-orbital" class="hidden flex-1 flex flex-col overflow-hidden">
+                <div id="orbital-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+            </div>
+
+            <!-- TAB 6: DEEP SPACE STARS, NEBULAE & GALAXIES -->
+            <div id="panel-cosmos" class="hidden flex-1 flex flex-col overflow-hidden">
+                <div id="cosmos-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- RIGHT INSPECTOR DRAWER: EARTH SATELLITE / WEATHER OR PLANET / EXOPLANET / COSMOS PHOTO -->
+    <aside id="location-inspector" class="fixed top-20 right-3 bottom-24 w-96 z-20 glass-panel rounded-2xl p-3.5 flex flex-col gap-2.5 transition-transform duration-300 translate-x-[120%] pointer-events-auto overflow-y-auto">
+        <!-- Header -->
+        <div class="flex items-start justify-between gap-2 border-b border-slate-800 pb-2">
+            <div class="min-w-0">
+                <span id="insp-category" class="text-[9px] font-mono-tech uppercase px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/30">
+                    SURFACE TARGET
+                </span>
+                <h2 id="insp-title" class="text-sm font-bold text-white mt-1 truncate">Grand Canyon, USA</h2>
+                <p id="insp-coords" class="text-[10px] font-mono-tech text-slate-400 truncate">36.0544° N, 112.1401° W</p>
+            </div>
+            <button onclick="closeInspector()" class="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 shrink-0">
+                ✕
+            </button>
+        </div>
+
+        <!-- Visual Viewport: Leaflet Satellite Map (Earth) OR Spacecraft Photo (Planets / Exoplanets / Cosmos) -->
+        <div class="relative w-full h-48 rounded-xl overflow-hidden border border-slate-700/80 bg-slate-950 shrink-0">
+            <!-- Interactive Leaflet Satellite Map (Shown only for Earth locations) -->
+            <div id="leaflet-map" class="w-full h-full z-10"></div>
+
+            <!-- Authentic NASA / ESA / JWST Celestial Photo (Shown for Planets, Moons, Exoplanets & Galaxies) -->
+            <img id="insp-img" alt="Celestial Telemetry Preview" class="hidden w-full h-full object-cover cursor-pointer z-10" onclick="openLightboxModal()" />
+
+            <!-- Visual Refresh Scanline Overlay -->
+            <div id="visual-refresh-overlay" class="hidden absolute inset-0 z-30 bg-slate-950/85 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none">
+                <div class="w-full h-8 bg-gradient-to-b from-transparent via-sky-400/25 to-transparent absolute top-0 left-0 scanline-sweep"></div>
+                <span class="w-5 h-5 border-2 border-sky-400 border-t-transparent rounded-full animate-spin mb-1.5"></span>
+                <span id="visual-refresh-label" class="text-[10px] font-mono-tech uppercase text-sky-300 tracking-wider">SYNCING SATELLITE IMAGERY...</span>
+            </div>
+
+            <!-- Top-left manual refresh + badge -->
+            <div class="absolute top-2 left-2 z-20 flex items-center gap-1.5">
+                <button onclick="manualRefreshVisual()" class="px-2 py-0.5 rounded bg-slate-950/85 hover:bg-sky-500/30 text-sky-300 border border-sky-400/40 text-[9px] font-mono-tech uppercase backdrop-blur-md">
+                    ↻ SYNC
+                </button>
+                <span id="insp-map-badge" class="px-2 py-0.5 rounded bg-slate-950/85 text-slate-200 border border-slate-700 text-[9px] font-mono-tech uppercase backdrop-blur-md">
+                    ESRI WORLD IMAGERY
+                </span>
+            </div>
+
+            <!-- Bottom-right full photo lightbox trigger -->
+            <button id="insp-zoom-photo-btn" onclick="openLightboxModal()" class="hidden absolute bottom-2 right-2 z-20 px-2 py-1 rounded-lg bg-slate-950/85 hover:bg-purple-500/35 text-purple-200 border border-purple-400/40 text-[9px] font-mono-tech uppercase backdrop-blur-md">
+                🔍 FULL PHOTO
+            </button>
+        </div>
+
+        <p id="insp-photo-credit" class="hidden text-[9px] font-mono-tech text-slate-400 italic -mt-1"></p>
+
+        <!-- EARTH LIVE METEOROLOGY & TARGET LOCAL TIME CARD -->
+        <div id="insp-weather-card" class="bg-slate-900/80 border border-sky-500/25 rounded-xl p-2.5 space-y-2">
+            <div class="flex items-center justify-between">
+                <span class="text-[9px] font-mono-tech uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                    LIVE SURFACE METEOROLOGY
+                </span>
+                <div class="flex items-center gap-1.5">
+                    <span id="weather-countdown-badge" class="text-[9px] font-mono-tech text-slate-400">AUTO 60s</span>
+                    <span id="weather-cond-badge" class="text-[9px] font-mono-tech px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-200">SCANNING...</span>
+                </div>
+            </div>
+            <!-- Target Local Clock -->
+            <div class="flex items-center justify-between bg-slate-950/70 px-2.5 py-1.5 rounded-lg border border-slate-800 text-[10px] font-mono-tech">
+                <span id="target-tz-name" class="text-slate-400">LOCAL TARGET TIME</span>
+                <span id="target-local-clock" class="text-amber-300 font-semibold">--:--:--</span>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5 text-[11px] font-mono-tech">
+                <div class="bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/80">
+                    <span class="text-[8px] text-slate-400 block">TEMP / FEELS LIKE</span>
+                    <span id="weather-temp" class="text-xs font-bold text-white">--°C / --°F</span>
+                    <span id="weather-feels" class="text-[9px] text-slate-400 block">Feels: --</span>
+                </div>
+                <div class="bg-slate-950/60 p-1.5 rounded-lg border border-slate-800/80">
+                    <span class="text-[8px] text-slate-400 block">WIND VECTOR</span>
+                    <span id="weather-wind" class="text-xs font-semibold text-sky-300">-- km/h</span>
+                    <span id="weather-humidity" class="text-[9px] text-amber-300 block">RH: --% • -- hPa</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- PLANETARY / LUNAR / EXOPLANET TELEMETRY CARD -->
+        <div id="insp-planetary-card" class="hidden bg-slate-900/80 border border-orange-400/30 rounded-xl p-2.5 space-y-2">
+            <div class="flex items-center justify-between">
+                <span class="text-[9px] font-mono-tech uppercase tracking-wider text-orange-300 font-bold">
+                    ROTATION & ORBITAL TELEMETRY
+                </span>
+                <button id="unlock-planet-btn" onclick="unlockCelestialTracking()" class="text-[9px] font-mono-tech px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-200 border border-orange-400/30 hover:bg-orange-500/35">
+                    TRACKING LOCKED ✕
+                </button>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5 text-[10px] font-mono-tech">
+                <div class="bg-slate-950/65 p-1.5 rounded-lg border border-slate-800">
+                    <span class="text-[8px] text-slate-400 block">SIDEREAL DAY</span>
+                    <span id="planet-rot-period" class="text-white font-semibold block truncate">--</span>
+                    <span id="planet-rot-vel" class="text-[8px] text-sky-300 block truncate">--</span>
+                </div>
+                <div class="bg-slate-950/65 p-1.5 rounded-lg border border-slate-800">
+                    <span class="text-[8px] text-slate-400 block">OBLIQUITY / YEAR</span>
+                    <span id="planet-axial-tilt" class="text-amber-300 font-semibold block truncate">--</span>
+                    <span id="planet-orbit-period" class="text-[8px] text-slate-300 block truncate">--</span>
+                </div>
+                <div class="bg-slate-950/65 p-1.5 rounded-lg border border-slate-800">
+                    <span class="text-[8px] text-slate-400 block">MOONS / GRAVITY</span>
+                    <span id="planet-moon-count" class="text-purple-300 font-semibold block truncate">--</span>
+                    <span id="planet-gravity" class="text-[8px] text-emerald-300 block truncate">--</span>
+                </div>
+            </div>
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <span class="text-[9px] font-mono-tech text-slate-400 uppercase">Interactive Moons & Subsystem</span>
+                    <span id="planet-active-moon-badge" class="text-[9px] font-mono-tech text-sky-300">Primary Body</span>
+                </div>
+                <div id="planet-moons-grid" class="grid grid-cols-2 gap-1"></div>
+            </div>
+        </div>
+
+        <!-- 3-Metric Quick Summary Bar -->
+        <div class="grid grid-cols-3 gap-1.5 text-[10px] font-mono-tech bg-slate-900/60 p-2 rounded-xl border border-slate-800">
+            <div>
+                <span id="insp-metric1-label" class="text-[8px] text-slate-400 block">Elevation</span>
+                <span id="insp-elevation" class="text-white font-semibold truncate block">2,400 m</span>
+            </div>
+            <div>
+                <span id="insp-metric2-label" class="text-[8px] text-slate-400 block">Region</span>
+                <span id="insp-region" class="text-sky-300 font-semibold truncate block">North America</span>
+            </div>
+            <div>
+                <span id="insp-metric3-label" class="text-[8px] text-slate-400 block">Solar State</span>
+                <span id="insp-solar" class="text-amber-300 font-semibold truncate block">Daylight</span>
+            </div>
+        </div>
+
+        <!-- Description -->
+        <p id="insp-desc" class="text-xs text-slate-300 leading-relaxed"></p>
+
+        <!-- External Google Earth 3D & Street View Links (Hidden for Planets/Cosmos) -->
+        <div id="insp-earth-links" class="grid grid-cols-2 gap-2 pt-1">
+            <a id="insp-ge-link" href="#" target="_blank" rel="noopener noreferrer"
+               class="flex items-center justify-center gap-1 py-2 px-2.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/35 text-sky-300 border border-sky-400/30 text-[11px] font-medium transition">
+                🌍 Google Earth 3D
+            </a>
+            <a id="insp-gmaps-link" href="#" target="_blank" rel="noopener noreferrer"
+               class="flex items-center justify-center gap-1 py-2 px-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-300 border border-emerald-400/30 text-[11px] font-medium transition">
+                📍 Street & Satellite
+            </a>
+        </div>
+    </aside>
+
+    <!-- BOTTOM HUD: CONTINUOUS ZOOM, KEPLERIAN EPHEMERIS DATE MACHINE & SPIN CONTROLS -->
+    <footer class="fixed bottom-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2.5 pointer-events-none">
+        <!-- Logarithmic Continuous Scale Slider -->
+        <div class="glass-panel rounded-2xl px-3.5 py-2 flex-1 min-w-[250px] flex items-center gap-3 pointer-events-auto">
+            <div class="shrink-0">
+                <span class="text-[9px] font-mono-tech uppercase text-slate-400 block">CONTINUOUS SCALE</span>
+                <span class="text-[11px] font-semibold text-sky-300">Earth → Solar → Galaxy</span>
+            </div>
+            <input id="zoom-slider" type="range" min="0" max="1000" value="150" class="w-full" />
+            <button id="spin-toggle-btn" onclick="toggleSpin()" class="px-2.5 py-1 rounded-xl bg-sky-500/20 text-sky-300 border border-sky-400/30 text-[10px] font-mono-tech shrink-0">
+                SPIN: ON
+            </button>
+        </div>
+
+        <!-- Keplerian Solar System Date Time-Machine -->
+        <div class="glass-panel rounded-2xl px-3.5 py-2 flex items-center gap-2 pointer-events-auto">
+            <div>
+                <span class="text-[9px] font-mono-tech uppercase text-orange-300 block">EPHEMERIS DATE MACHINE</span>
+                <span id="ephemeris-status-label" class="text-[10px] font-mono-tech text-white">LIVE REAL-TIME</span>
+            </div>
+            <button onclick="stepEphemerisDays(-30)" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-mono-tech" title="Step Back 1 Month">-1M</button>
+            <input id="ephemeris-date-input" type="date" class="bg-slate-900/90 border border-slate-700 rounded-lg px-2 py-1 text-xs font-mono-tech text-white focus:outline-none focus:border-sky-400" />
+            <button onclick="stepEphemerisDays(30)" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-mono-tech" title="Step Forward 1 Month">+1M</button>
+            <button onclick="syncEphemerisToNow()" class="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-300 border border-emerald-400/30 text-[10px] font-mono-tech">
+                TODAY
+            </button>
+        </div>
+    </footer>
+
+    <!-- FULL-SCREEN OBSERVATORY LIGHTBOX MODAL -->
+    <div id="lightbox-modal" class="hidden fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-6" onclick="closeLightboxModal()">
+        <div class="max-w-4xl w-full glass-panel rounded-2xl p-4 flex flex-col gap-3" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between">
+                <div>
+                    <span id="lightbox-subtitle" class="text-[10px] font-mono-tech uppercase text-sky-400">OBSERVATORY ARCHIVE</span>
+                    <h3 id="lightbox-title" class="text-base font-bold text-white">Celestial Photograph</h3>
+                </div>
+                <button onclick="closeLightboxModal()" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs">Close ✕</button>
+            </div>
+            <div class="w-full max-h-[70vh] overflow-hidden rounded-xl bg-black flex items-center justify-center">
+                <img id="lightbox-img" alt="Full Resolution Celestial Archive" class="max-h-[70vh] w-auto object-contain" />
+            </div>
+            <p id="lightbox-credit" class="text-xs font-mono-tech text-slate-400"></p>
+        </div>
+    </div>
+
+    <!-- Three.js & Post-Processing Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+
+    <script>
+        /*************************************************************************
+         * 1. CORE SCENE, CAMERA, RENDERER & UNREALBLOOM POST-PROCESSING
+         *************************************************************************/
+        const container = document.getElementById('canvas-container');
+        const pinsContainer = document.getElementById('pins-container');
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 20000);
+        camera.position.set(0, 7, 26);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.12;
+        container.appendChild(renderer.domElement);
+
+        const renderScene = new THREE.RenderPass(scene, camera);
+        const bloomPass = new THREE.UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            1.25,
+            0.55,
+            0.24
+        );
+        const composer = new THREE.EffectComposer(renderer);
+        composer.addPass(renderScene);
+        composer.addPass(bloomPass);
+        let bloomEnabled = true;
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.06;
+        controls.minDistance = 10.6;
+        controls.maxDistance = 3200;
+
+        // Ambient + Heliocentric Lighting for 3D Planets & Exoplanets
+        scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+        const sunPointLight = new THREE.PointLight(0xfff4d6, 2.2, 4000);
+        sunPointLight.position.set(115, 0, 0);
+        scene.add(sunPointLight);
+
+        // Global State Variables
+        const EARTH_RADIUS = 10;
+        let spinSpeedMultiplier = 0.5;
+        let realTimeRotationMode = false;
+        let showPins = true;
+        let cameraTween = null;
+        let lockedCelestialBody = null;
+        let lockedBeforePos = new THREE.Vector3();
+        const clickableCelestialMeshes = [];
+
+        let lastInspectedState = {
+            mode: 'earth',
+            lat: 36.0544,
+            lon: -112.1401,
+            zoom: 13,
+            title: 'Grand Canyon, USA',
+            photoUrl: ''
+        };
+
+        /*************************************************************************
+         * 2. VISUAL REFRESH & LIGHTBOX HELPERS
+         *************************************************************************/
+        function showVisualRefreshOverlay(label = 'SYNCING TELEMETRY...') {
+            const ov = document.getElementById('visual-refresh-overlay');
+            const lbl = document.getElementById('visual-refresh-label');
+            if (lbl) lbl.textContent = label;
+            if (ov) ov.classList.remove('hidden');
+        }
+
+        function hideVisualRefreshOverlay() {
+            const ov = document.getElementById('visual-refresh-overlay');
+            if (ov) ov.classList.add('hidden');
+        }
+
+        const inspImgEl = document.getElementById('insp-img');
+        inspImgEl.addEventListener('load', () => hideVisualRefreshOverlay());
+        inspImgEl.addEventListener('error', () => hideVisualRefreshOverlay());
+
+        function refreshCelestialPhoto(url, scanMessage = 'ACQUIRING SPACECRAFT IMAGERY...') {
+            showVisualRefreshOverlay(scanMessage);
+            inspImgEl.removeAttribute('src');
+            setTimeout(() => {
+                inspImgEl.src = url;
+            }, 60);
+            setTimeout(() => hideVisualRefreshOverlay(), 1200);
+        }
+
+        function manualRefreshVisual() {
+            if (lastInspectedState.mode === 'earth') {
+                refreshEarthSatelliteView(lastInspectedState.lat, lastInspectedState.lon, lastInspectedState.zoom, lastInspectedState.title);
+                fetchOpenMeteoWeather(lastInspectedState.lat, lastInspectedState.lon, true);
+            } else if (lastInspectedState.photoUrl) {
+                refreshCelestialPhoto(lastInspectedState.photoUrl, 'RE-SYNCING OBSERVATORY ARCHIVE...');
+            }
+        }
+
+        function openLightboxModal() {
+            if (!inspImgEl.src) return;
+            document.getElementById('lightbox-img').src = inspImgEl.src;
+            document.getElementById('lightbox-title').textContent = document.getElementById('insp-title').textContent;
+            document.getElementById('lightbox-subtitle').textContent = document.getElementById('insp-category').textContent;
+            document.getElementById('lightbox-credit').textContent = document.getElementById('insp-photo-credit').textContent;
+            document.getElementById('lightbox-modal').classList.remove('hidden');
+        }
+
+        function closeLightboxModal() {
+            document.getElementById('lightbox-modal').classList.add('hidden');
+        }
+
+        function closeInspector() {
+            document.getElementById('location-inspector').classList.add('translate-x-[120%]');
+        }
+
+        function unlockCelestialTracking() {
+            lockedCelestialBody = null;
+            document.getElementById('unlock-planet-btn').textContent = 'UNLOCKED';
+        }
+
+        /*************************************************************************
+         * 3. 3D EARTH GLOBE, ATMOSPHERE, CLOUDS & LANDMARK PINS
+         *************************************************************************/
+        const earthGroup = new THREE.Group();
+        scene.add(earthGroup);
+
+        const texLoader = new THREE.TextureLoader();
+        texLoader.setCrossOrigin('anonymous');
+
+        const dayTex = texLoader.load('https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg');
+        const nightTex = texLoader.load('https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg');
+        const waterTex = texLoader.load('https://unpkg.com/three-globe@2.31.0/example/img/earth-water.png');
+
+        const sunDirection = new THREE.Vector3(1, 0.15, 0.4).normalize();
+        const earthUniforms = {
+            dayTexture: { value: dayTex },
+            nightTexture: { value: nightTex },
+            waterTexture: { value: waterTex },
+            sunDir: { value: sunDirection }
+        };
+
+        const earthMaterial = new THREE.ShaderMaterial({
+            uniforms: earthUniforms,
+            vertexShader: `
+                varying vec2 vUv;
+                varying vec3 vNormalWorld;
+                varying vec3 vWorldPos;
+                void main() {
+                    vUv = uv;
+                    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                    vWorldPos = worldPosition.xyz;
+                    vNormalWorld = normalize(mat3(modelMatrix) * normal);
+                    gl_Position = projectionMatrix * viewMatrix * worldPosition;
+                }
+            `,
+            fragmentShader: `
+                uniform sampler2D dayTexture;
+                uniform sampler2D nightTexture;
+                uniform sampler2D waterTexture;
+                uniform vec3 sunDir;
+                varying vec2 vUv;
+                varying vec3 vNormalWorld;
+                varying vec3 vWorldPos;
+
+                void main() {
+                    vec3 normal = normalize(vNormalWorld);
+                    float sunDot = dot(normal, normalize(sunDir));
+                    float dayMix = smoothstep(-0.18, 0.22, sunDot);
+
+                    vec3 dayColor = texture2D(dayTexture, vUv).rgb * 0.9;
+                    vec3 rawNight = texture2D(nightTexture, vUv).rgb;
+                    vec3 nightColor = pow(rawNight, vec3(1.35)) * vec3(2.6, 1.95, 1.1);
+                    float waterMask = texture2D(waterTexture, vUv).r;
+
+                    vec3 viewDir = normalize(cameraPosition - vWorldPos);
+                    vec3 reflectDir = reflect(-normalize(sunDir), normal);
+                    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 30.0) * waterMask * max(sunDot, 0.0);
+
+                    float twilight = smoothstep(-0.22, 0.0, sunDot) * (1.0 - smoothstep(0.0, 0.25, sunDot));
+                    vec3 twilightCol = vec3(1.25, 0.42, 0.12) * twilight * 0.6;
+
+                    float fresnel = pow(1.0 - max(dot(viewDir, normal), 0.0), 3.2);
+                    vec3 atmosRim = vec3(0.28, 0.78, 1.35) * fresnel * smoothstep(-0.35, 0.4, sunDot);
+
+                    vec3 finalColor = mix(nightColor, dayColor + vec3(1.3, 1.15, 0.9) * spec * 0.85, dayMix) + twilightCol + atmosRim;
+                    gl_FragColor = vec4(finalColor, 1.0);
+                }
+            `
+        });
+
+        const earthMesh = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS, 96, 96), earthMaterial);
+        earthGroup.add(earthMesh);
+
+        // Outer Atmospheric Halo
+        const haloMat = new THREE.ShaderMaterial({
+            transparent: true,
+            side: THREE.BackSide,
+            blending: THREE.AdditiveBlending,
+            vertexShader: `
+                varying vec3 vNormal;
+                void main() {
+                    vNormal = normalize(normalMatrix * normal);
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                varying vec3 vNormal;
+                void main() {
+                    float intensity = pow(0.62 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.8);
+                    gl_FragColor = vec4(0.28, 0.78, 1.35, 1.0) * intensity * 0.85;
+                }
+            `
+        });
+        scene.add(new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS * 1.12, 64, 64), haloMat));
+
+        function latLonToVector3(lat, lon, radius = EARTH_RADIUS) {
+            const phi = (90 - lat) * (Math.PI / 180);
+            const theta = (lon + 180) * (Math.PI / 180);
+            return new THREE.Vector3(
+                -radius * Math.sin(phi) * Math.cos(theta),
+                radius * Math.cos(phi),
+                radius * Math.sin(phi) * Math.sin(theta)
+            );
+        }
+
+        // Curated Earth Landmarks
+        const LOCATIONS = [
+            { id: 'grand-canyon', name: 'Grand Canyon, USA', lat: 36.0544, lon: -112.1401, zoom: 13, category: 'Geological Wonder', elevation: '2,400 m', region: 'Arizona, USA', desc: 'Mile-deep gorge carved by the Colorado River exposing nearly two billion years of geological history.' },
+            { id: 'giza', name: 'Pyramids of Giza, Egypt', lat: 29.9792, lon: 31.1342, zoom: 16, category: 'Ancient Monument', elevation: '138 m', region: 'Cairo, Egypt', desc: 'Iconic Fourth Dynasty necropolis on the Giza Plateau clearly visible from low Earth orbit.' },
+            { id: 'everest', name: 'Mount Everest, Himalayas', lat: 27.9881, lon: 86.9250, zoom: 13, category: 'Highest Peak', elevation: '8,849 m', region: 'Nepal / Tibet', desc: 'Earth’s highest mountain above sea level in the Mahalangur Himal sub-range of the Himalayas.' },
+            { id: 'tokyo', name: 'Tokyo Metropolis, Japan', lat: 35.6762, lon: 139.6503, zoom: 15, category: 'Megacity Hub', elevation: '40 m', region: 'Kanto, Japan', desc: 'Vibrant coastal metropolis along Tokyo Bay producing one of the brightest nocturnal light signatures on Earth.' },
+            { id: 'richat', name: 'Eye of the Sahara, Mauritania', lat: 21.1240, lon: -11.4020, zoom: 12, category: 'Orbital Landmark', elevation: '400 m', region: 'Mauritania', desc: 'The Richat Structure: a 40-km concentric geological dome used as a landmark by astronauts since Gemini.' },
+            { id: 'bora-bora', name: 'Bora Bora Lagoon', lat: -16.5004, lon: -151.7415, zoom: 13, category: 'Coral Atoll', elevation: '727 m', region: 'French Polynesia', desc: 'Volcanic remnant island surrounded by a barrier reef and turquoise lagoon in the South Pacific.' },
+            { id: 'venice', name: 'Venetian Lagoon, Italy', lat: 45.4408, lon: 12.3155, zoom: 15, category: 'Historic Maritime', elevation: '2 m', region: 'Veneto, Italy', desc: 'Archipelago of 118 islands linked by over 400 bridges inside a crescent-shaped Adriatic lagoon.' }
+        ];
+
+        let sessionSearchedPlaces = [];
+
+        // Custom Searched Address Emerald Beacon
+        const customAddressBeacon = new THREE.Group();
+        customAddressBeacon.visible = false;
+        const beaconPin = new THREE.Mesh(
+            new THREE.SphereGeometry(0.18, 16, 16),
+            new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 2.3, 1.2) })
+        );
+        const beaconRing = new THREE.Mesh(
+            new THREE.RingGeometry(0.25, 0.42, 32),
+            new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 2.1, 1.4), side: THREE.DoubleSide, transparent: true, opacity: 0.85 })
+        );
+        customAddressBeacon.add(beaconPin, beaconRing);
+        earthGroup.add(customAddressBeacon);
+
+        // Earth Landmark 3D Pins
+        LOCATIONS.forEach(loc => {
+            const pos = latLonToVector3(loc.lat, loc.lon, EARTH_RADIUS * 1.008);
+            const pinMesh = new THREE.Mesh(
+                new THREE.SphereGeometry(0.14, 16, 16),
+                new THREE.MeshBasicMaterial({ color: new THREE.Color(0.35, 1.45, 2.2) })
+            );
+            pinMesh.position.copy(pos);
+            earthGroup.add(pinMesh);
+            loc.mesh = pinMesh;
+
+            const el = document.createElement('div');
+            el.className = 'pin-label';
+            el.innerHTML = `
+                <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-950/85 border border-sky-400/60 shadow-lg backdrop-blur-md hover:bg-sky-500/30 transition-all">
+                    <span class="w-1.5 h-1.5 rounded-full bg-sky-400"></span>
+                    <span class="text-[10px] font-mono-tech font-semibold text-white whitespace-nowrap">${loc.name.split(',')[0]}</span>
+                </div>
+            `;
+            el.onclick = (e) => { e.stopPropagation(); selectLocation(loc.id); };
+            pinsContainer.appendChild(el);
+            loc.labelEl = el;
+        });
+
+        /*************************************************************************
+         * 4. LEAFLET SATELLITE VIEWER & OPEN-METEO LIVE WEATHER + TIMEZONE
+         *************************************************************************/
+        let leafletMap = null;
+        let leafletImageryLayer = null;
+        let leafletLabelsLayer = null;
+        let leafletMarker = null;
+
+        function initLeafletMap() {
+            leafletMap = L.map('leaflet-map', { zoomControl: true }).setView([36.0544, -112.1401], 13);
+            leafletImageryLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19,
+                attribution: 'Esri World Imagery'
+            }).addTo(leafletMap);
+            leafletLabelsLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+                maxZoom: 19
+            }).addTo(leafletMap);
+            leafletMarker = L.circleMarker([36.0544, -112.1401], {
+                radius: 8,
+                color: '#10b981',
+                weight: 2,
+                fillColor: '#38bdf8',
+                fillOpacity: 0.75
+            }).addTo(leafletMap);
+        }
+        initLeafletMap();
+
+        function refreshEarthSatelliteView(lat, lon, zoom = 15, title = 'Target') {
+            showVisualRefreshOverlay(`ACQUIRING SATELLITE TILES (${lat.toFixed(2)}°, ${lon.toFixed(2)}°)...`);
+            const mapEl = document.getElementById('leaflet-map');
+            mapEl.classList.remove('hidden');
+            document.getElementById('insp-img').classList.add('hidden');
+            document.getElementById('insp-earth-links').classList.remove('hidden');
+            document.getElementById('insp-zoom-photo-btn').classList.add('hidden');
+            document.getElementById('insp-photo-credit').classList.add('hidden');
+            document.getElementById('insp-map-badge').textContent = `ESRI SATELLITE • Z${zoom}`;
+
+            [30, 190, 380].forEach(delay => {
+                setTimeout(() => {
+                    if (!leafletMap) return;
+                    leafletMap.stop();
+                    leafletMap.invalidateSize(true);
+                    leafletMap.setView([lat, lon], zoom, { animate: false });
+                    if (leafletMarker) {
+                        leafletMarker.setLatLng([lat, lon]);
+                        leafletMarker.bindPopup(`<b>${title}</b><br>${lat.toFixed(4)}°, ${lon.toFixed(4)}°`);
+                    }
+                    if (leafletImageryLayer) leafletImageryLayer.redraw();
+                }, delay);
+            });
+            setTimeout(() => hideVisualRefreshOverlay(), 480);
+        }
+
+        const WMO_MAP = {
+            0: '☀️ Clear Sky', 1: '🌤️ Mainly Clear', 2: '⛅ Partly Cloudy', 3: '☁️ Overcast',
+            45: '🌫️ Fog', 51: '🌦️ Drizzle', 61: '🌧️ Rain', 71: '❄️ Snow', 95: '⛈️ Thunderstorm'
+        };
+        let activeTargetTimezone = 'UTC';
+        let weatherSecondsRemaining = 60;
+
+        async function fetchOpenMeteoWeather(lat, lon, manual = false) {
+            if (manual) weatherSecondsRemaining = 60;
+            const badge = document.getElementById('weather-cond-badge');
+            if (badge) badge.textContent = 'POLLING METEO...';
+            try {
+                const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m&timezone=auto`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (data.timezone) {
+                    activeTargetTimezone = data.timezone;
+                    document.getElementById('target-tz-name').textContent = data.timezone.replace('_', ' ');
+                }
+                if (data.current) {
+                    const cur = data.current;
+                    const c = cur.temperature_2m;
+                    const f = (c * 9 / 5 + 32).toFixed(1);
+                    const fc = cur.apparent_temperature;
+                    const ff = (fc * 9 / 5 + 32).toFixed(1);
+                    document.getElementById('weather-temp').textContent = `${c}°C / ${f}°F`;
+                    document.getElementById('weather-feels').textContent = `Feels: ${fc}°C / ${ff}°F`;
+                    document.getElementById('weather-wind').textContent = `${cur.wind_speed_10m} km/h (${cur.wind_direction_10m}°)`;
+                    document.getElementById('weather-humidity').textContent = `RH: ${cur.relative_humidity_2m}% • ${Math.round(cur.surface_pressure || 1013)} hPa`;
+                    document.getElementById('weather-cond-badge').textContent = WMO_MAP[cur.weather_code] || 'Active Weather';
+                    document.getElementById('insp-solar').textContent = cur.is_day ? '☀️ Local Daylight' : '🌙 Local Night';
+                }
+            } catch (e) {
+                if (badge) badge.textContent = 'ORBITAL ESTIMATE';
+            }
+        }
+
+        /*************************************************************************
+         * 5. LIVE ISS, USGS EARTHQUAKES & 144-SATELLITE SWARM
+         *************************************************************************/
+        const issGroup = new THREE.Group();
+        const issBody = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.12, 0.12), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.2, 2.5) }));
+        const issWings = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.78, 0.22), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.1, 1.3, 0.2) }));
+        issGroup.add(issBody, issWings);
+        earthGroup.add(issGroup);
+
+        const issState = { lat: 24.5, lon: -75.2, alt: 418, vel: 27580, cockpitLocked: false };
+
+        async function updateISSTelemetry() {
+            try {
+                const res = await fetch('https://api.wheretheiss.at/v1/satellites/25544');
+                if (!res.ok) throw new Error('ISS fallback');
+                const data = await res.json();
+                issState.lat = data.latitude;
+                issState.lon = data.longitude;
+                issState.alt = Math.round(data.altitude);
+                issState.vel = Math.round(data.velocity);
+            } catch (e) {
+                issState.lon = ((issState.lon + 2.1 + 180) % 360) - 180;
+                issState.lat = 51.6 * Math.sin(Date.now() * 0.0002);
+            }
+            document.getElementById('iss-coords').textContent = `${issState.lat.toFixed(2)}° / ${issState.lon.toFixed(2)}°`;
+            document.getElementById('iss-vel').textContent = `${issState.alt} km • ${issState.vel.toLocaleString()} km/h`;
+            const pos = latLonToVector3(issState.lat, issState.lon, EARTH_RADIUS * 1.075);
+            issGroup.position.copy(pos);
+            issGroup.lookAt(new THREE.Vector3(0, 0, 0));
+        }
+        updateISSTelemetry();
+        setInterval(updateISSTelemetry, 4500);
+
+        function toggleISSCockpitLock(forceVal) {
+            issState.cockpitLocked = typeof forceVal === 'boolean' ? forceVal : !issState.cockpitLocked;
+            const btn = document.getElementById('iss-lock-btn');
+            if (btn) {
+                btn.className = issState.cockpitLocked
+                    ? 'text-[9px] font-mono-tech px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-200 border border-emerald-400/50'
+                    : 'text-[9px] font-mono-tech px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 hover:bg-sky-500/30';
+            }
+        }
+
+        function flyToISS() {
+            flyToCoordinates(issState.lat, issState.lon, 'International Space Station (ISS)', 'ORBITAL SPACECRAFT (LEO)', `Orbiting at ${issState.alt} km altitude and ${issState.vel.toLocaleString()} km/h.`, 6, false);
+        }
+
+        // 144 Starlink + GPS Satellite Swarm
+        const swarmGroup = new THREE.Group();
+        earthGroup.add(swarmGroup);
+        const swarmSatellites = [];
+        for (let i = 0; i < 144; i++) {
+            const isGPS = i >= 120;
+            const radius = isGPS ? EARTH_RADIUS * 1.42 : EARTH_RADIUS * 1.055;
+            const inclination = (isGPS ? 55 : 53) * (Math.PI / 180);
+            const raan = ((i % 6) / 6) * Math.PI * 2;
+            const phase = (i / (isGPS ? 24 : 120)) * Math.PI * 2;
+            const speed = isGPS ? 0.0025 : 0.0085;
+            const mesh = new THREE.Mesh(
+                new THREE.SphereGeometry(isGPS ? 0.09 : 0.055, 8, 8),
+                new THREE.MeshBasicMaterial({ color: isGPS ? new THREE.Color(2.0, 1.5, 0.3) : new THREE.Color(0.4, 1.6, 2.4) })
+            );
+            swarmGroup.add(mesh);
+            swarmSatellites.push({ mesh, radius, inclination, raan, phase, speed, isGPS });
+        }
+
+        function renderSatellitesTabList() {
+            const el = document.getElementById('orbital-list');
+            if (!el) return;
+            el.innerHTML = `
+                <div class="p-2.5 rounded-xl bg-sky-500/10 border border-sky-400/30 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-mono-tech font-bold text-sky-300 uppercase">Active Orbital Traffic</span>
+                        <button onclick="swarmGroup.visible = !swarmGroup.visible; renderSatellitesTabList();" class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-200 text-[9px] font-mono-tech">
+                            ${swarmGroup.visible ? 'HIDE SWARM' : 'SHOW SWARM'}
+                        </button>
+                    </div>
+                    <p class="text-[10px] text-slate-300">Visualizing 120 LEO Starlink communication satellites (550 km, 53° inclination) and 24 MEO GPS navigation satellites (20,200 km, 55° inclination).</p>
+                </div>
+            `;
+        }
+
+        // Live USGS Earthquakes
+        const quakesGroup = new THREE.Group();
+        earthGroup.add(quakesGroup);
+        let liveQuakesData = [];
+
+        async function fetchUSGSQuakes() {
+            try {
+                const res = await fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson');
+                const data = await res.json();
+                liveQuakesData = data.features.slice(0, 25).map(f => ({
+                    id: f.id,
+                    mag: f.properties.mag.toFixed(1),
+                    place: f.properties.place || 'Seismic Event',
+                    lon: f.geometry.coordinates[0],
+                    lat: f.geometry.coordinates[1],
+                    depth: f.geometry.coordinates[2]
+                }));
+                quakesGroup.clear();
+                liveQuakesData.forEach(q => {
+                    const pos = latLonToVector3(q.lat, q.lon, EARTH_RADIUS * 1.006);
+                    const ring = new THREE.Mesh(
+                        new THREE.RingGeometry(0.12, 0.22, 24),
+                        new THREE.MeshBasicMaterial({ color: q.mag >= 5 ? new THREE.Color(2.4, 0.3, 0.3) : new THREE.Color(2.2, 1.3, 0.2), side: THREE.DoubleSide })
+                    );
+                    ring.position.copy(pos);
+                    ring.lookAt(new THREE.Vector3(0, 0, 0));
+                    quakesGroup.add(ring);
+                });
+                const listEl = document.getElementById('seismic-list');
+                if (listEl) {
+                    listEl.innerHTML = liveQuakesData.map(q => `
+                        <button onclick="flyToCoordinates(${q.lat}, ${q.lon}, '${q.place.replace(/'/g, '')}', 'LIVE SEISMIC EVENT (M${q.mag})', 'USGS real-time earthquake at ${q.depth} km depth.', 11, false)" class="w-full text-left p-2 rounded-xl bg-slate-900/70 hover:bg-rose-500/15 border border-slate-800 hover:border-rose-400/40 transition block">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-white truncate pr-2">${q.place}</span>
+                                <span class="text-[10px] font-mono-tech px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300">M${q.mag}</span>
+                            </div>
+                            <p class="text-[9px] font-mono-tech text-slate-400 mt-0.5">Depth: ${q.depth} km • ${q.lat.toFixed(2)}°, ${q.lon.toFixed(2)}°</p>
+                        </button>
+                    `).join('');
+                }
+            } catch (e) {}
+        }
+        fetchUSGSQuakes();
+
+        function switchSidebarTab(tabName) {
+            ['landmarks', 'planets', 'exoplanets', 'seismic', 'orbital', 'cosmos'].forEach(t => {
+                const btn = document.getElementById(`tab-${t}`);
+                const panel = document.getElementById(`panel-${t}`);
+                if (!btn || !panel) return;
+                if (t === tabName) {
+                    btn.className = 'px-1 py-1.5 rounded-lg text-[8px] font-mono-tech font-bold uppercase tracking-wider bg-sky-500/25 text-sky-300 border border-sky-400/40 transition-all flex items-center justify-center gap-0.5';
+                    panel.classList.remove('hidden');
+                } else {
+                    btn.className = 'px-1 py-1.5 rounded-lg text-[8px] font-mono-tech font-bold uppercase tracking-wider text-slate-400 hover:text-slate-200 transition-all flex items-center justify-center gap-0.5';
+                    panel.classList.add('hidden');
+                }
+            });
+            if (tabName === 'planets') renderPlanetsTabList();
+            if (tabName === 'exoplanets') renderExoplanetsTabList();
+            if (tabName === 'orbital') renderSatellitesTabList();
+            if (tabName === 'cosmos') renderCosmosTabList();
+        }
+
+        /*************************************************************************
+         * 6. MASSIVE 3D MILKY WAY SPIRAL GALAXY, SOLAR SYSTEM & EXOPLANETS
+         *************************************************************************/
+        const galaxyGroup = new THREE.Group();
+        scene.add(galaxyGroup);
+
+        // Procedural Star Glow Sprite
+        function createStarSpriteTexture() {
+            const c = document.createElement('canvas');
+            c.width = 64;
+            c.height = 64;
+            const ctx = c.getContext('2d');
+            const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+            grad.addColorStop(0, 'rgba(255,255,255,1)');
+            grad.addColorStop(0.35, 'rgba(186,230,253,0.8)');
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 64, 64);
+            return new THREE.CanvasTexture(c);
+        }
+        const starSprite = createStarSpriteTexture();
+
+        // Rich Procedural Planetary Band Texture Generator
+        function createRichCelestialTexture(type, baseHex, band1Hex, band2Hex, accentHex) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = baseHex;
+            ctx.fillRect(0, 0, 512, 256);
+
+            for (let y = 0; y < 256; y += 4) {
+                const wave = Math.sin(y * 0.12) * 0.5 + 0.5;
+                ctx.fillStyle = wave > 0.5 ? band1Hex : band2Hex;
+                ctx.globalAlpha = 0.35;
+                ctx.fillRect(0, y, 512, 3);
+            }
+            ctx.globalAlpha = 0.45;
+            ctx.fillStyle = accentHex || '#ffffff';
+            for (let i = 0; i < 18; i++) {
+                const x = (i * 73) % 480;
+                const y = (i * 41) % 220 + 18;
+                ctx.beginPath();
+                ctx.ellipse(x, y, 16, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        // 75,000-Star Spiral Galaxy
+        const STAR_COUNT = 65000;
+        const galGeo = new THREE.BufferGeometry();
+        const galPos = new Float32Array(STAR_COUNT * 3);
+        const galCol = new Float32Array(STAR_COUNT * 3);
+        const cCore = new THREE.Color(2.5, 2.0, 1.1);
+        const cArm = new THREE.Color(0.35, 1.25, 2.1);
+        const cOuter = new THREE.Color(1.2, 0.4, 1.85);
+
+        for (let i = 0; i < STAR_COUNT; i++) {
+            const i3 = i * 3;
+            const r = Math.pow(Math.random(), 1.55) * 1850 + 80;
+            const branch = ((i % 4) / 4) * Math.PI * 2;
+            const spin = r * 0.0042;
+            galPos[i3] = Math.cos(branch + spin) * r + (Math.random() - 0.5) * 140;
+            galPos[i3 + 1] = (Math.random() - 0.5) * (75 * (1 - r / 2000));
+            galPos[i3 + 2] = Math.sin(branch + spin) * r - 900 + (Math.random() - 0.5) * 140;
+
+            const col = cCore.clone().lerp(cArm, Math.min(1, r / 700)).lerp(cOuter, Math.min(1, r / 1700));
+            galCol[i3] = col.r;
+            galCol[i3 + 1] = col.g;
+            galCol[i3 + 2] = col.b;
+        }
+        galGeo.setAttribute('position', new THREE.BufferAttribute(galPos, 3));
+        galGeo.setAttribute('color', new THREE.BufferAttribute(galCol, 3));
+        const galaxyPoints = new THREE.Points(galGeo, new THREE.PointsMaterial({
+            size: 2.5,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.92,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        }));
+        galaxyGroup.add(galaxyPoints);
+
+        /*************************************************************************
+         * 6B. FULL 8-PLANET SOLAR SYSTEM, SUN, MOONS & KEPLERIAN EPHEMERIS
+         *************************************************************************/
+        const SOLAR_SYSTEM_BODIES = [
+            {
+                id: 'sun', name: 'The Sun (Sol)', category: 'G2V Main-Sequence Star',
+                distAU: '0.00 AU (Center)', radius: 8.5, orbitRadius: 0,
+                siderealHours: 609.12, siderealPeriodLabel: '25.38 Earth Days',
+                equatorialVelKmh: '7,189 km/h', axialTiltDeg: 7.25,
+                orbitalPeriodLabel: '230M Years (Galactic)', moonCountLabel: '8 Planets',
+                gravityLabel: '274 m/s² (27.9 g)',
+                L0: 0, n: 0, e: 0,
+                color: '#f59e0b', band1: '#ea580c', band2: '#fde047',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/b/b4/The_Sun_by_the_Atmospheric_Imaging_Assembly_of_NASA%27s_Solar_Dynamics_Observatory_-_20100819.jpg',
+                credit: 'NASA / SDO Atmospheric Imaging Assembly (304 Å Extreme UV)',
+                description: 'Our solar system’s central star containing 99.86% of its total mass, fusing 600 million tons of hydrogen every second.',
+                moons: []
+            },
+            {
+                id: 'mercury', name: 'Mercury', category: 'Terrestrial Planet',
+                distAU: '0.39 AU', radius: 1.3, orbitRadius: 24,
+                siderealHours: 1407.6, siderealPeriodLabel: '58d 15h 30m',
+                equatorialVelKmh: '10.89 km/h', axialTiltDeg: 0.03,
+                orbitalPeriodLabel: '87.97 Days', moonCountLabel: '0 Moons',
+                gravityLabel: '3.7 m/s²',
+                L0: 252.25, n: 4.0923, e: 0.2056,
+                color: '#94a3b8', band1: '#64748b', band2: '#cbd5e1',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/4/4a/Mercury_in_true_color.jpg',
+                credit: 'NASA / Johns Hopkins APL / Carnegie Institution — MESSENGER Spacecraft',
+                description: 'Smallest and innermost planet in the Solar System, scarred by ancient impact basins like Caloris Planitia.',
+                moons: []
+            },
+            {
+                id: 'venus', name: 'Venus', category: 'Terrestrial Planet',
+                distAU: '0.72 AU', radius: 1.9, orbitRadius: 36,
+                siderealHours: -5832.5, siderealPeriodLabel: '243d 0h (Retrograde)',
+                equatorialVelKmh: '6.52 km/h', axialTiltDeg: 177.36,
+                orbitalPeriodLabel: '224.70 Days', moonCountLabel: '0 Moons',
+                gravityLabel: '8.87 m/s²',
+                L0: 181.98, n: 1.6021, e: 0.0067,
+                color: '#fbbf24', band1: '#d97706', band2: '#fef3c7',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/e/e5/Venus-real_color.jpg',
+                credit: 'NASA / JPL-Caltech — Mariner 10 Spacecraft',
+                description: 'Shrouded in dense sulfuric acid clouds with a runaway greenhouse surface temperature of 465°C and retrograde axial rotation.',
+                moons: []
+            },
+            {
+                id: 'earth-orbit-ref', name: 'Earth & Luna', category: 'Terrestrial Ocean World',
+                distAU: '1.00 AU', radius: 2.1, orbitRadius: 50,
+                siderealHours: 23.934, siderealPeriodLabel: '23h 56m 04s',
+                equatorialVelKmh: '1,674 km/h', axialTiltDeg: 23.44,
+                orbitalPeriodLabel: '365.25 Days', moonCountLabel: '1 Moon (Luna)',
+                gravityLabel: '9.81 m/s²',
+                L0: 100.46, n: 0.9856, e: 0.0167,
+                isEarthReference: true,
+                color: '#38bdf8', band1: '#0284c7', band2: '#bbf7d0',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/9/97/The_Earth_seen_from_Apollo_17.jpg',
+                credit: 'NASA — Apollo 17 "The Blue Marble" Crew Photograph',
+                description: 'Third planet from the Sun and the only astronomical object known to harbor liquid surface oceans and life.',
+                moons: [
+                    { id: 'luna', name: 'Luna (The Moon)', periodLabel: '27.32 Days (Tidally Locked)', radiusLabel: '1,737.4 km', dist: 4.5, size: 0.55, speed: 0.8, image: 'https://upload.wikimedia.org/wikipedia/commons/e/e1/FullMoon2010.jpg', credit: 'NASA / GSFC / Lunar Reconnaissance Orbiter', desc: 'Earth’s fifth-largest natural satellite in the Solar System, stabilizing our axial tilt.' }
+                ]
+            },
+            {
+                id: 'mars', name: 'Mars', category: 'Terrestrial Planet',
+                distAU: '1.52 AU', radius: 1.65, orbitRadius: 66,
+                siderealHours: 24.623, siderealPeriodLabel: '24h 37m 22s',
+                equatorialVelKmh: '868 km/h', axialTiltDeg: 25.19,
+                orbitalPeriodLabel: '686.98 Days', moonCountLabel: '2 Moons',
+                gravityLabel: '3.72 m/s²',
+                L0: 355.45, n: 0.5240, e: 0.0934,
+                color: '#ef4444', band1: '#991b1b', band2: '#fca5a5',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/0/02/OSIRIS_Mars_true_color.jpg',
+                credit: 'ESA / MPS for OSIRIS Team — Rosetta Spacecraft',
+                description: 'The Red Planet, home to Olympus Mons (the tallest volcano in the Solar System) and Valles Marineris.',
+                moons: [
+                    { id: 'phobos', name: 'Phobos', periodLabel: '7h 39m', radiusLabel: '11.27 km', dist: 3.1, size: 0.32, speed: 2.2, image: 'https://upload.wikimedia.org/wikipedia/commons/5/5c/Phobos_colour_2008.jpg', credit: 'NASA / JPL-Caltech / University of Arizona (HiRISE)', desc: 'Innermost and larger of Mars’s two moons, orbiting closer to its primary than any other moon.' },
+                    { id: 'deimos', name: 'Deimos', periodLabel: '30h 18m', radiusLabel: '6.2 km', dist: 4.3, size: 0.26, speed: 1.3, image: 'https://upload.wikimedia.org/wikipedia/commons/8/8d/Deimos-MRO.jpg', credit: 'NASA / JPL-Caltech / University of Arizona (MRO)', desc: 'Outer, smaller Martian moon with a smooth regolith-blanketed surface.' }
+                ]
+            },
+            {
+                id: 'jupiter', name: 'Jupiter', category: 'Jovian Gas Giant',
+                distAU: '5.20 AU', radius: 4.4, orbitRadius: 88,
+                siderealHours: 9.925, siderealPeriodLabel: '9h 55m 30s (Fastest)',
+                equatorialVelKmh: '45,583 km/h', axialTiltDeg: 3.13,
+                orbitalPeriodLabel: '11.86 Years', moonCountLabel: '95 Moons',
+                gravityLabel: '24.79 m/s²',
+                L0: 34.40, n: 0.0831, e: 0.0484,
+                color: '#eab308', band1: '#a16207', band2: '#fef08a',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/2/2b/Jupiter_and_its_shrunken_Great_Red_Spot.jpg',
+                credit: 'NASA / ESA / A. Simon (GSFC) — Hubble Space Telescope WFC3',
+                description: 'Largest planet in the Solar System with rapid 9h 55m axial rotation, ammonia cloud bands, and the Great Red Spot.',
+                moons: [
+                    { id: 'io', name: 'Io', periodLabel: '1.77 Days', radiusLabel: '1,821.6 km', dist: 6.2, size: 0.45, speed: 1.8, image: 'https://upload.wikimedia.org/wikipedia/commons/7/7b/Io_highest_resolution_true_color.jpg', credit: 'NASA / JPL / University of Arizona — Galileo Spacecraft', desc: 'Most volcanically active world in the Solar System with over 400 active sulfur volcanoes.' },
+                    { id: 'europa', name: 'Europa', periodLabel: '3.55 Days', radiusLabel: '1,560.8 km', dist: 7.6, size: 0.42, speed: 1.3, image: 'https://upload.wikimedia.org/wikipedia/commons/5/54/Europa-moon.jpg', credit: 'NASA / JPL-Caltech / SETI Institute — Galileo Mission', desc: 'Icy Galilean moon harboring a global subsurface saltwater ocean beneath its fractured ice shell.' },
+                    { id: 'ganymede', name: 'Ganymede', periodLabel: '7.15 Days', radiusLabel: '2,634.1 km', dist: 9.1, size: 0.54, speed: 0.95, image: 'https://upload.wikimedia.org/wikipedia/commons/f/f2/Ganymede_g1_true-edit1.jpg', credit: 'NASA / JPL — Galileo & Juno Missions', desc: 'Largest moon in the Solar System (larger than planet Mercury) and the only moon with its own magnetosphere.' }
+                ]
+            },
+            {
+                id: 'saturn', name: 'Saturn', category: 'Ringed Gas Giant',
+                distAU: '9.58 AU', radius: 3.8, orbitRadius: 114,
+                siderealHours: 10.656, siderealPeriodLabel: '10h 33m 38s',
+                equatorialVelKmh: '36,840 km/h', axialTiltDeg: 26.73,
+                orbitalPeriodLabel: '29.45 Years', moonCountLabel: '146 Moons',
+                gravityLabel: '10.44 m/s²',
+                L0: 49.94, n: 0.0335, e: 0.0542,
+                hasRings: true,
+                color: '#fde047', band1: '#ca8a04', band2: '#fef9c3',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Saturn_during_Equinox.jpg',
+                credit: 'NASA / JPL / Space Science Institute — Cassini Orbiter',
+                description: 'Second-largest planet in the Solar System, encircled by a spectacular ring system of water ice and rocky debris.',
+                moons: [
+                    { id: 'titan', name: 'Titan', periodLabel: '15.95 Days', radiusLabel: '2,574.7 km', dist: 8.4, size: 0.52, speed: 0.9, image: 'https://upload.wikimedia.org/wikipedia/commons/4/45/Titan_in_true_color.jpg', credit: 'NASA / JPL-Caltech / Space Science Institute — Cassini', desc: 'Only moon with a dense nitrogen atmosphere and liquid methane/ethane surface lakes and seas.' },
+                    { id: 'enceladus', name: 'Enceladus', periodLabel: '1.37 Days', radiusLabel: '252.1 km', dist: 6.4, size: 0.36, speed: 1.6, image: 'https://upload.wikimedia.org/wikipedia/commons/8/83/Enceladus_from_Cassini.jpg', credit: 'NASA / JPL / Space Science Institute — Cassini', desc: 'Ocean world venting cryo-volcanic plumes of water vapor and organic molecules from its south polar tiger stripes.' }
+                ]
+            },
+            {
+                id: 'uranus', name: 'Uranus', category: 'Ice Giant (97.8° Sideways Tilt)',
+                distAU: '19.22 AU', radius: 2.8, orbitRadius: 140,
+                siderealHours: -17.24, siderealPeriodLabel: '17h 14m (Retrograde)',
+                equatorialVelKmh: '9,320 km/h', axialTiltDeg: 97.77,
+                orbitalPeriodLabel: '84.02 Years', moonCountLabel: '28 Moons',
+                gravityLabel: '8.69 m/s²',
+                L0: 313.23, n: 0.0117, e: 0.0472,
+                hasRings: true,
+                color: '#67e8f9', band1: '#0891b2', band2: '#cffafe',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/3/3d/Uranus2.jpg',
+                credit: 'NASA / JPL-Caltech — Voyager 2 Spacecraft',
+                description: 'Ice giant with an extreme 97.77° axial obliquity, causing it to roll sideways around the Sun.',
+                moons: [
+                    { id: 'titania', name: 'Titania', periodLabel: '8.71 Days', radiusLabel: '788.4 km', dist: 5.5, size: 0.38, speed: 1.1, image: 'https://upload.wikimedia.org/wikipedia/commons/a/ac/Titania_%28moon%29_color%2C_cropped.jpg', credit: 'NASA / JPL — Voyager 2', desc: 'Largest of the moons of Uranus, marked by giant fault canyons.' }
+                ]
+            },
+            {
+                id: 'neptune', name: 'Neptune', category: 'Outermost Ice Giant',
+                distAU: '30.05 AU', radius: 2.7, orbitRadius: 164,
+                siderealHours: 16.11, siderealPeriodLabel: '16h 06m 36s',
+                equatorialVelKmh: '9,650 km/h', axialTiltDeg: 28.32,
+                orbitalPeriodLabel: '164.8 Years', moonCountLabel: '16 Moons',
+                gravityLabel: '11.15 m/s²',
+                L0: 304.88, n: 0.0060, e: 0.0086,
+                color: '#3b82f6', band1: '#1d4ed8', band2: '#93c5fd',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/6/63/Neptune_-_Voyager_2_%2829347980845%29_flatten_crop.jpg',
+                credit: 'NASA / JPL — Voyager 2 Narrow-Angle Camera',
+                description: 'Outermost major planet in the Solar System, whipped by supersonic methane winds reaching 2,100 km/h.',
+                moons: [
+                    { id: 'triton', name: 'Triton', periodLabel: '5.88 Days (Retrograde)', radiusLabel: '1,353.4 km', dist: 5.4, size: 0.42, speed: -1.2, image: 'https://upload.wikimedia.org/wikipedia/commons/a/a6/Triton_moon_mosaic_Voyager_2_%28large%29.jpg', credit: 'NASA / JPL / USGS — Voyager 2', desc: 'Largest moon of Neptune and the only large moon in the Solar System with a retrograde orbit, likely a captured Kuiper Belt object.' }
+                ]
+            }
+        ];
+
+        const solarCenter = new THREE.Vector3(115, 0, 0);
+        const solarOrreryGroup = new THREE.Group();
+        solarOrreryGroup.position.copy(solarCenter);
+        scene.add(solarOrreryGroup);
+
+        SOLAR_SYSTEM_BODIES.forEach(body => {
+            if (body.orbitRadius > 0) {
+                const ringGeo = new THREE.RingGeometry(body.orbitRadius - 0.18, body.orbitRadius + 0.18, 128);
+                const ringMat = new THREE.MeshBasicMaterial({ color: body.color, side: THREE.DoubleSide, transparent: true, opacity: 0.25 });
+                const orbitRing = new THREE.Mesh(ringGeo, ringMat);
+                orbitRing.rotation.x = Math.PI / 2;
+                solarOrreryGroup.add(orbitRing);
+            }
+
+            const holder = new THREE.Group();
+            const tex = createRichCelestialTexture('planet', body.color, body.band1, body.band2, '#ffffff');
+            const mat = body.id === 'sun'
+                ? new THREE.MeshBasicMaterial({ color: new THREE.Color(3.6, 2.1, 0.5) })
+                : new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6, metalness: 0.1, emissive: new THREE.Color(body.color), emissiveIntensity: 0.28 });
+
+            const mesh = new THREE.Mesh(new THREE.SphereGeometry(body.radius, 36, 36), mat);
+            mesh.rotation.z = THREE.MathUtils.degToRad(body.axialTiltDeg || 0);
+            mesh.userData = { celestialItem: body };
+            clickableCelestialMeshes.push(mesh);
+            holder.add(mesh);
+
+            if (body.hasRings) {
+                const rGeo = new THREE.RingGeometry(body.radius * 1.35, body.radius * 2.15, 64);
+                const rMat = new THREE.MeshBasicMaterial({ color: body.color, side: THREE.DoubleSide, transparent: true, opacity: 0.65 });
+                const rMesh = new THREE.Mesh(rGeo, rMat);
+                rMesh.rotation.x = body.id === 'uranus' ? 0.15 : Math.PI / 2.2;
+                holder.add(rMesh);
+            }
+
+            // 3D Orbiting Moons
+            body.moonMeshes = [];
+            (body.moons || []).forEach((m, idx) => {
+                const mMesh = new THREE.Mesh(
+                    new THREE.SphereGeometry(m.size, 16, 16),
+                    new THREE.MeshStandardMaterial({ color: 0xe2e8f0, emissive: 0x38bdf8, emissiveIntensity: 0.25 })
+                );
+                mMesh.userData = { celestialItem: body, moonItem: m };
+                clickableCelestialMeshes.push(mMesh);
+                holder.add(mMesh);
+                body.moonMeshes.push({ mesh: mMesh, data: m, phase: idx * 2.1 });
+            });
+
+            solarOrreryGroup.add(holder);
+            body.holder = holder;
+            body.mesh = mesh;
+            body.currentLonDeg = body.L0;
+
+            const el = document.createElement('div');
+            el.className = 'pin-label';
+            el.style.opacity = '0';
+            el.innerHTML = `
+                <div class="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-950/90 border border-orange-400/60 shadow-lg backdrop-blur-md hover:bg-orange-500/30 transition-all">
+                    <span class="w-1.5 h-1.5 rounded-full" style="background:${body.color}"></span>
+                    <span class="text-[10px] font-mono-tech font-bold text-white whitespace-nowrap">${body.name.split(' (')[0]}</span>
+                </div>
+            `;
+            el.onclick = (e) => { e.stopPropagation(); selectPlanetOrMoon(body, null); };
+            pinsContainer.appendChild(el);
+            body.labelEl = el;
+        });
+
+        // Deep-Space Stars, Nebulae & Galaxies
+        const DEEP_SPACE_OBJECTS = [
+            { id: 'sgr-a', name: 'Sagittarius A* (Galactic Core)', category: 'Supermassive Black Hole', constellation: 'Sagittarius', distanceLabel: '26,670 Light-Years', pos: new THREE.Vector3(0, 0, -900), color: '#f472b6', image: 'https://upload.wikimedia.org/wikipedia/commons/9/96/EHT_Saggitarius_A_black_hole.tif.jpg', credit: 'Event Horizon Telescope (EHT) Collaboration', desc: '4.15-million-solar-mass supermassive black hole at the center of the Milky Way.' },
+            { id: 'pillars', name: 'Pillars of Creation (M16)', category: 'Star-Forming Nebula', constellation: 'Serpens', distanceLabel: '6,500 Light-Years', pos: new THREE.Vector3(420, 55, -620), color: '#a855f7', image: 'https://upload.wikimedia.org/wikipedia/commons/6/68/Pillars_of_creation_2014_HST_WFC3-UVIS_full-res_denoised.jpg', credit: 'NASA / ESA / Hubble Heritage Team (STScI/AURA)', desc: 'Towering trunks of interstellar gas and dust in the Eagle Nebula.' },
+            { id: 'orion', name: 'Orion Nebula (M42)', category: 'Diffuse Emission Nebula', constellation: 'Orion', distanceLabel: '1,344 Light-Years', pos: new THREE.Vector3(-340, -35, -480), color: '#38bdf8', image: 'https://upload.wikimedia.org/wikipedia/commons/f/f3/Orion_Nebula_-_Hubble_2006_mosaic_18000.jpg', credit: 'NASA / ESA / M. Robberto (STScI/ESA)', desc: 'Closest massive star-forming nursery to Earth, visible to the naked eye.' },
+            { id: 'andromeda', name: 'Andromeda Galaxy (M31)', category: 'Barred Spiral Galaxy', constellation: 'Andromeda', distanceLabel: '2.537 Million Light-Years', pos: new THREE.Vector3(-680, 140, -1250), color: '#818cf8', image: 'https://upload.wikimedia.org/wikipedia/commons/c/c2/M31_09-01-2011_%28cropped%29.jpg', credit: 'Adam Evans / NASA Astronomy Picture of the Day', desc: 'Nearest major spiral galaxy to the Milky Way, containing approximately one trillion stars.' }
+        ];
+
+        DEEP_SPACE_OBJECTS.forEach(item => {
+            const mesh = new THREE.Mesh(
+                new THREE.SphereGeometry(8, 24, 24),
+                new THREE.MeshBasicMaterial({ color: new THREE.Color(item.color).multiplyScalar(2.0) })
+            );
+            mesh.position.copy(item.pos);
+            mesh.userData = { deepSpaceItem: item };
+            clickableCelestialMeshes.push(mesh);
+            galaxyGroup.add(mesh);
+            item.mesh = mesh;
+
+            const el = document.createElement('div');
+            el.className = 'pin-label';
+            el.style.opacity = '0';
+            el.innerHTML = `
+                <div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-950/90 border border-purple-400/75 shadow-lg backdrop-blur-md hover:bg-purple-500/35 transition-all">
+                    <span class="w-2 h-2 rounded-full animate-pulse" style="background:${item.color}"></span>
+                    <span class="text-[10px] font-mono-tech font-bold text-purple-100 whitespace-nowrap">${item.name.split(' (')[0]}</span>
+                </div>
+            `;
+            el.onclick = (e) => { e.stopPropagation(); flyToDeepSpace(item.id); };
+            pinsContainer.appendChild(el);
+            item.labelEl = el;
+        });
+
+        /*************************************************************************
+         * 6D. NEWLY DISCOVERED EXOPLANETS (JWST, TESS, KEPLER & ESO ARCHIVE)
+         *************************************************************************/
+        const DISCOVERED_EXOPLANETS = [
+            {
+                id: 'exo-k2-18b',
+                name: 'K2-18 b (Hycean Ocean World)',
+                discoveryBadge: 'JWST BIOSIGNATURE CANDIDATE',
+                hostStar: 'K2-18 (Red Dwarf M2.5V)',
+                category: 'Sub-Neptune Hycean Exoplanet',
+                distanceLabel: '124 Light-Years (Leo)',
+                radiusLabel: '2.61 × Earth Radius (8.63 M⊕)',
+                orbitalPeriodLabel: '32.94 Earth Days (Habitable Zone)',
+                siderealPeriodLabel: '32.94 Days (Tidally Locked)',
+                equatorialVelKmh: '885 km/h',
+                axialTiltDeg: 2.1,
+                gravityLabel: '12.43 m/s² (1.27 g)',
+                temperature: '265 K / -8°C (Liquid Ocean Zone)',
+                localPos: new THREE.Vector3(285, 68, -210),
+                radius: 4.2,
+                color: '#14b8a6',
+                band1: '#0f766e',
+                band2: '#99f6e4',
+                accent: '#38bdf8',
+                description: 'Observed by the James Webb Space Telescope (JWST), K2-18 b orbits within the habitable zone of a cool red dwarf 124 light-years away. JWST transmission spectroscopy detected abundant methane (CH4) and carbon dioxide (CO2) with a potential signature of dimethyl sulfide (DMS), pointing toward a hydrogen-rich atmosphere above a global liquid water ocean.',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/0/03/K2-18_b_artist%27s_impression.jpg',
+                credit: 'NASA / ESA / CSA / Joseph Olmsted (STScI) — JWST Exoplanet Discovery'
+            },
+            {
+                id: 'exo-lhs-1140b',
+                name: 'LHS 1140 b ("Bullseye Eyeball World")',
+                discoveryBadge: 'JWST 2024 LIQUID WATER CANDIDATE',
+                hostStar: 'LHS 1140 (M4.5V Red Dwarf)',
+                category: 'Habitable-Zone Super-Earth',
+                distanceLabel: '48.8 Light-Years (Cetus)',
+                radiusLabel: '1.73 × Earth Radius (5.60 M⊕)',
+                orbitalPeriodLabel: '24.74 Earth Days',
+                siderealPeriodLabel: '24.74 Days (Synchronously Locked)',
+                equatorialVelKmh: '580 km/h',
+                axialTiltDeg: 0.5,
+                gravityLabel: '18.3 m/s² (1.87 g)',
+                temperature: '235 K (-38°C / +20°C Substellar Sea)',
+                localPos: new THREE.Vector3(-230, 42, -195),
+                radius: 3.6,
+                color: '#38bdf8',
+                band1: '#1e3a8a',
+                band2: '#e0f2fe',
+                accent: '#0284c7',
+                description: 'Confirmed by 2024 James Webb Space Telescope NIRISS observations as a prime rocky/water-rich Super-Earth rather than a mini-Neptune. LHS 1140 b likely possesses a nitrogen-rich secondary atmosphere and a 4,000-km-wide liquid water "bullseye" ocean on its permanent day side.',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/e/e2/Artist%E2%80%99s_impression_of_the_super-Earth_exoplanet_LHS_1140b.jpg',
+                credit: 'ESO / Spaceengine / Université de Montréal (JWST NIRISS Team)'
+            },
+            {
+                id: 'exo-trappist-1e',
+                name: 'TRAPPIST-1 e (Rocky Habitable World)',
+                discoveryBadge: '7-PLANET SYSTEM HABITABLE CORE',
+                hostStar: 'TRAPPIST-1 (Ultra-Cool Dwarf M8V)',
+                category: 'Earth-Sized Terrestrial Exoplanet',
+                distanceLabel: '40.66 Light-Years (Aquarius)',
+                radiusLabel: '0.92 × Earth Radius (0.69 M⊕)',
+                orbitalPeriodLabel: '6.10 Earth Days',
+                siderealPeriodLabel: '6.10 Days (Resonant Chain)',
+                equatorialVelKmh: '3,120 km/h',
+                axialTiltDeg: 0.1,
+                gravityLabel: '8.01 m/s² (0.82 g)',
+                temperature: '251 K / -22°C (Temperate)',
+                localPos: new THREE.Vector3(165, -48, -175),
+                radius: 3.3,
+                color: '#34d399',
+                band1: '#065f46',
+                band2: '#a7f3d0',
+                accent: '#6ee7b7',
+                description: 'Fourth planet in the famous seven-world TRAPPIST-1 system just 40.6 light-years from Earth. With an iron-rock density nearly identical to Earth and a temperate orbit where liquid water can pool on the surface, it is one of the highest-priority rocky worlds under active JWST atmospheric reconnaissance.',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/3/38/Artist%27s_impression_of_TRAPPIST-1e.jpg',
+                credit: 'NASA / JPL-Caltech (Spitzer & JWST Exoplanet Exploration)'
+            },
+            {
+                id: 'exo-toi-715b',
+                name: 'TOI-715 b (TESS Habitable Super-Earth)',
+                discoveryBadge: 'NASA TESS 2024 DISCOVERY',
+                hostStar: 'TOI-715 (M4 Red Dwarf)',
+                category: 'Conservative Habitable-Zone Super-Earth',
+                distanceLabel: '137 Light-Years (Volans)',
+                radiusLabel: '1.55 × Earth Radius (3.02 M⊕)',
+                orbitalPeriodLabel: '19.28 Earth Days',
+                siderealPeriodLabel: '19.28 Days (Tidally Locked)',
+                equatorialVelKmh: '665 km/h',
+                axialTiltDeg: 1.4,
+                gravityLabel: '12.3 m/s² (1.25 g)',
+                temperature: '234 K / -39°C (Equilibrium)',
+                localPos: new THREE.Vector3(-295, -62, -260),
+                radius: 3.7,
+                color: '#2dd4bf',
+                band1: '#115e59',
+                band2: '#ccfbf1',
+                accent: '#5eead4',
+                description: 'Discovered in 2024 by NASA’s Transiting Exoplanet Survey Satellite (TESS), TOI-715 b orbits squarely inside the conservative habitable zone of a quiet, older red dwarf star—allowing frequent, high-signal transit observations by the James Webb Space Telescope.',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/e/e1/Kepler-452b_artist_concept.jpg',
+                credit: 'NASA / JPL-Caltech / TESS Science Team'
+            },
+            {
+                id: 'exo-gliese-12b',
+                name: 'Gliese 12 b (Nearest Temperate Transiting World)',
+                discoveryBadge: 'TESS & CHEOPS 2024 DISCOVERY',
+                hostStar: 'Gliese 12 (Inactive M-Dwarf)',
+                category: 'Temperate Earth/Venus-Sized Exoplanet',
+                distanceLabel: '39.7 Light-Years (Pisces)',
+                radiusLabel: '0.96 × Earth Radius (0.88 M⊕)',
+                orbitalPeriodLabel: '12.76 Earth Days',
+                siderealPeriodLabel: '12.76 Days',
+                equatorialVelKmh: '620 km/h',
+                axialTiltDeg: 0.8,
+                gravityLabel: '9.35 m/s² (0.95 g)',
+                temperature: '315 K / 42°C (Mild Surface)',
+                localPos: new THREE.Vector3(120, 75, -165),
+                radius: 3.2,
+                color: '#fb923c',
+                band1: '#9a3412',
+                band2: '#fed7aa',
+                accent: '#fde047',
+                description: 'Discovered in May 2024 by NASA’s TESS and ESA’s CHEOPS space telescopes, Gliese 12 b is the closest transiting, temperate, Earth-sized planet identified to date. Receiving 1.6× Earth’s solar flux from a magnetically quiet star, it bridges the evolutionary gap between Earth and Venus.',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/6/60/Kepler-186f_artist_concept.jpg',
+                credit: 'NASA / ESA / TESS & CHEOPS Science Consortium (2024)'
+            },
+            {
+                id: 'exo-speculoos-3b',
+                name: 'SPECULOOS-3 b (Ultra-Short Period World)',
+                discoveryBadge: '2024 ULTRA-COOL STAR DISCOVERY',
+                hostStar: 'SPECULOOS-3 (M6.5 Dwarf — Jupiter-Sized Star)',
+                category: 'Irradiated Earth-Sized Rocky World',
+                distanceLabel: '54.6 Light-Years (Cygnus)',
+                radiusLabel: '0.977 × Earth Radius',
+                orbitalPeriodLabel: '17.0 Hours (0.719 Days)',
+                siderealPeriodLabel: '17.0 Hours (Synchronous)',
+                equatorialVelKmh: '11,800 km/h',
+                axialTiltDeg: 0.2,
+                gravityLabel: '10.1 m/s² (1.03 g)',
+                temperature: '553 K / 280°C (Dayside Rock)',
+                localPos: new THREE.Vector3(-140, 88, -225),
+                radius: 3.1,
+                color: '#f43f5e',
+                band1: '#881337',
+                band2: '#fecdd3',
+                accent: '#fb7185',
+                description: 'Discovered in May 2024 by the global SPECULOOS observatory network, this Earth-sized rocky planet completes a full orbit around its Jupiter-sized ultra-cool dwarf star in just 17 hours, making it a prime target for JWST emission spectroscopy of bare planetary rock.',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/2/22/55_Cancri_e_artist_impression.jpg',
+                credit: 'NASA / ESA / CSA / SPECULOOS Consortium (2024)'
+            },
+            {
+                id: 'exo-wasp-39b',
+                name: 'WASP-39 b ("Bocaprins" — JWST CO2 & SO2)',
+                discoveryBadge: 'FIRST EXOPLANET PHOTOCHEMISTRY (JWST)',
+                hostStar: 'WASP-39 (G8 Sun-Like Star)',
+                category: 'Puffy Hot Saturn Exoplanet',
+                distanceLabel: '700 Light-Years (Virgo)',
+                radiusLabel: '1.27 × Jupiter Radius (0.28 MJ)',
+                orbitalPeriodLabel: '4.055 Earth Days',
+                siderealPeriodLabel: '4.055 Days (Tidally Locked)',
+                equatorialVelKmh: '44,200 km/h',
+                axialTiltDeg: 1.8,
+                gravityLabel: '4.26 m/s² (0.43 g)',
+                temperature: '1,166 K / 893°C',
+                localPos: new THREE.Vector3(345, -75, -330),
+                radius: 4.8,
+                color: '#f59e0b',
+                band1: '#78350f',
+                band2: '#fef3c7',
+                accent: '#38bdf8',
+                description: 'WASP-39 b made astronomical history when the James Webb Space Telescope made the first-ever unambiguous detection of carbon dioxide (CO2) and photochemically produced sulfur dioxide (SO2) in an exoplanet atmosphere, along with water vapor, sodium, and potassium clouds.',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/1/14/WASP-39_b_%28NIRISS_transmission_spectrum_illustration%29.jpg',
+                credit: 'NASA / ESA / CSA / Joseph Olmsted (STScI) — JWST Early Release Science'
+            },
+            {
+                id: 'exo-proxima-b',
+                name: 'Proxima Centauri b (Closest Known Exoplanet)',
+                discoveryBadge: 'NEAREST EXTRASOLAR PLANET TO EARTH',
+                hostStar: 'Proxima Centauri (M5.5Ve Flare Star)',
+                category: 'Habitable-Zone Terrestrial Exoplanet',
+                distanceLabel: '4.246 Light-Years (Centaurus)',
+                radiusLabel: '1.03 × Earth Radius (1.07 M⊕)',
+                orbitalPeriodLabel: '11.186 Earth Days',
+                siderealPeriodLabel: '11.186 Days',
+                equatorialVelKmh: '1,910 km/h',
+                axialTiltDeg: 1.0,
+                gravityLabel: '10.0 m/s² (1.02 g)',
+                temperature: '234 K / -39°C (Equilibrium)',
+                localPos: new THREE.Vector3(110, 22, -135),
+                radius: 3.4,
+                color: '#10b981',
+                band1: '#064e3b',
+                band2: '#d1fae5',
+                accent: '#f59e0b',
+                description: 'Orbiting inside the habitable zone of our Sun’s closest stellar neighbor just 4.24 light-years away, Proxima Centauri b is an Earth-mass world verified at high precision by ESO’s ESPRESSO spectrograph.',
+                image: 'https://upload.wikimedia.org/wikipedia/commons/8/81/Artist%E2%80%99s_impression_of_the_planet_orbiting_Proxima_Centauri.jpg',
+                credit: 'ESO / M. Kornmesser (European Southern Observatory)'
+            }
+        ];
+
+        const exoplanetObjects = [];
+
+        function buildDiscoveredExoplanets() {
+            DISCOVERED_EXOPLANETS.forEach((exo, idx) => {
+                const sysGroup = new THREE.Group();
+                sysGroup.position.copy(exo.localPos);
+
+                const hostStarSprite = new THREE.Sprite(
+                    new THREE.SpriteMaterial({
+                        map: starSprite,
+                        color: 0xfef08a,
+                        transparent: true,
+                        opacity: 0.9,
+                        blending: THREE.AdditiveBlending,
+                        depthWrite: false
+                    })
+                );
+                hostStarSprite.scale.set(16, 16, 1);
+                sysGroup.add(hostStarSprite);
+
+                const orbitRing = new THREE.Mesh(
+                    new THREE.RingGeometry(11.5, 12.1, 64),
+                    new THREE.MeshBasicMaterial({ color: exo.color, side: THREE.DoubleSide, transparent: true, opacity: 0.55 })
+                );
+                orbitRing.rotation.x = Math.PI / 2.3;
+                sysGroup.add(orbitRing);
+
+                const exoTex = createRichCelestialTexture('gas', exo.color, exo.band1, exo.band2, exo.accent);
+                const exoMat = new THREE.MeshStandardMaterial({
+                    map: exoTex,
+                    roughness: 0.55,
+                    metalness: 0.12,
+                    emissive: new THREE.Color(exo.color),
+                    emissiveIntensity: 0.42
+                });
+                const exoMesh = new THREE.Mesh(new THREE.SphereGeometry(exo.radius, 36, 36), exoMat);
+                exoMesh.position.set(11.8, 0, 0);
+                exoMesh.userData = { exoplanetItem: exo };
+                clickableCelestialMeshes.push(exoMesh);
+                sysGroup.add(exoMesh);
+
+                galaxyGroup.add(sysGroup);
+                exo.systemGroup = sysGroup;
+                exo.mesh = exoMesh;
+                exo.orbitPhase = idx * 1.15;
+
+                const el = document.createElement('div');
+                el.className = 'pin-label';
+                el.style.opacity = '0';
+                el.innerHTML = `
+                    <div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-teal-950/90 border border-teal-400/75 shadow-lg backdrop-blur-md hover:bg-teal-500/35 transition-all">
+                        <span class="w-2 h-2 rounded-full animate-ping" style="background:${exo.color}"></span>
+                        <span class="text-[10px] font-mono-tech font-bold text-teal-100 whitespace-nowrap">${exo.name.split(' (')[0]}</span>
+                        <span class="text-[8px] font-mono-tech text-amber-300 border-l border-teal-700 pl-1">NEW EXO</span>
+                    </div>
+                `;
+                el.onclick = (e) => { e.stopPropagation(); selectExoplanetById(exo.id); };
+                pinsContainer.appendChild(el);
+                exo.labelEl = el;
+                exoplanetObjects.push(exo);
+            });
+        }
+        buildDiscoveredExoplanets();
+
+        /*************************************************************************
+         * 7. SIDEBAR RENDERERS & SELECTION HANDLERS
+         *************************************************************************/
+        function renderLocationCards() {
+            const el = document.getElementById('landmarks-list');
+            if (!el) return;
+            let html = '';
+
+            if (sessionSearchedPlaces.length > 0) {
+                html += `
+                    <div class="flex items-center justify-between px-1 mb-1">
+                        <span class="text-[9px] font-mono-tech uppercase text-emerald-300 font-bold">Recent Searches (${sessionSearchedPlaces.length})</span>
+                        <button onclick="clearAllSearchHistory()" class="text-[9px] font-mono-tech text-rose-400 hover:underline">Clear All</button>
+                    </div>
+                `;
+                sessionSearchedPlaces.forEach((p, idx) => {
+                    html += `
+                        <div class="flex items-center justify-between gap-1 p-2 rounded-xl bg-emerald-950/40 hover:bg-emerald-500/20 border border-emerald-500/30 transition mb-1">
+                            <button onclick="flyToCoordinates(${p.lat}, ${p.lon}, '${p.title.replace(/'/g, '')}', '${p.typeBadge || 'SEARCHED LOCATION'}', '${p.display_name.replace(/'/g, '')}', ${p.zoom || 16}, true)" class="text-left flex-1 min-w-0">
+                                <div class="text-xs font-bold text-emerald-200 truncate">${p.title}</div>
+                                <div class="text-[9px] font-mono-tech text-slate-400 truncate">${p.display_name}</div>
+                            </button>
+                            <button onclick="removeSearchedPlace(${idx})" class="text-slate-400 hover:text-rose-400 px-1.5 text-xs" title="Remove">✕</button>
+                        </div>
+                    `;
+                });
+                html += `<div class="border-b border-slate-800 my-2"></div>`;
+            }
+
+            html += LOCATIONS.map(loc => `
+                <button onclick="selectLocation('${loc.id}')" class="w-full text-left p-2.5 rounded-xl bg-slate-900/70 hover:bg-sky-500/15 border border-slate-800 hover:border-sky-400/50 transition block">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-white">${loc.name}</span>
+                        <span class="text-[9px] font-mono-tech text-sky-300">${loc.category}</span>
+                    </div>
+                    <p class="text-[10px] font-mono-tech text-slate-400 mt-0.5">${loc.lat.toFixed(2)}°, ${loc.lon.toFixed(2)}° • ${loc.region}</p>
+                </button>
+            `).join('');
+
+            el.innerHTML = html;
+        }
+
+        function renderPlanetsTabList() {
+            const el = document.getElementById('planets-list');
+            if (!el) return;
+            el.innerHTML = `
+                <div class="p-2 rounded-xl bg-orange-500/10 border border-orange-400/30 mb-2">
+                    <span class="text-[9px] font-mono-tech uppercase text-orange-300 font-bold block mb-1">Historic Mission Ephemeris</span>
+                    <div class="grid grid-cols-2 gap-1">
+                        <button onclick="applyEphemerisDateString('1969-07-20')" class="px-2 py-1 rounded bg-slate-900 hover:bg-orange-500/20 text-[9px] font-mono-tech text-slate-200 border border-slate-700">Apollo 11 (1969)</button>
+                        <button onclick="applyEphemerisDateString('1977-09-05')" class="px-2 py-1 rounded bg-slate-900 hover:bg-orange-500/20 text-[9px] font-mono-tech text-slate-200 border border-slate-700">Voyager 1 (1977)</button>
+                        <button onclick="applyEphemerisDateString('2024-04-08')" class="px-2 py-1 rounded bg-slate-900 hover:bg-orange-500/20 text-[9px] font-mono-tech text-slate-200 border border-slate-700">Solar Eclipse (2024)</button>
+                        <button onclick="applyEphemerisDateString('2040-09-08')" class="px-2 py-1 rounded bg-slate-900 hover:bg-orange-500/20 text-[9px] font-mono-tech text-slate-200 border border-slate-700">Alignment (2040)</button>
+                    </div>
+                </div>
+                ${SOLAR_SYSTEM_BODIES.map(b => `
+                    <div onclick="selectPlanetById('${b.id}')" class="cursor-pointer p-2.5 rounded-xl bg-slate-900/75 hover:bg-orange-500/15 border border-slate-800 hover:border-orange-400/50 transition-all">
+                        <div class="flex items-center gap-2.5">
+                            <img src="${b.image}" alt="${b.name}" onerror="this.style.display='none'" class="w-10 h-10 rounded-lg object-cover border border-orange-400/40 shrink-0" />
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-white truncate">${b.name}</span>
+                                    <span class="text-[9px] font-mono-tech text-amber-300">${b.distAU.split(' ')[0]} AU</span>
+                                </div>
+                                <div class="text-[10px] text-slate-400 truncate">${b.category}</div>
+                                <div class="text-[9px] font-mono-tech text-sky-300 mt-0.5">Day: ${b.siderealPeriodLabel.split(' ')[0]} •Lon: ${(b.currentLonDeg || 0).toFixed(0)}°</div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+        }
+
+        function renderExoplanetsTabList() {
+            const el = document.getElementById('exoplanets-list');
+            if (!el) return;
+            el.innerHTML = `
+                <div class="p-2.5 rounded-xl bg-teal-500/10 border border-teal-400/35 mb-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[9px] font-mono-tech uppercase text-teal-300 font-bold flex items-center gap-1.5">
+                            <span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-ping"></span>
+                            NASA / JWST / TESS Exoplanet Archive
+                        </span>
+                        <span class="text-[8px] font-mono-tech px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-200">5,700+ Confirmed</span>
+                    </div>
+                    <p class="text-[10px] text-slate-300 mt-1">Click any newly discovered world below to fly out to its star system, inspect its 3D spinning globe, and view JWST/TESS telemetry.</p>
+                </div>
+                ${DISCOVERED_EXOPLANETS.map(exo => `
+                    <div onclick="selectExoplanetById('${exo.id}')" class="cursor-pointer p-2.5 rounded-xl bg-slate-900/75 hover:bg-teal-500/15 border border-slate-800 hover:border-teal-400/60 transition-all">
+                        <div class="flex items-center justify-between gap-1 mb-1">
+                            <span class="text-[8px] font-mono-tech uppercase px-1.5 py-0.5 rounded bg-teal-500/20 text-teal-300 border border-teal-400/30">${exo.discoveryBadge}</span>
+                            <span class="text-[9px] font-mono-tech text-amber-300 shrink-0">${exo.distanceLabel.split(' ')[0]} ly</span>
+                        </div>
+                        <div class="flex items-center gap-2.5 mt-1">
+                            <img src="${exo.image}" alt="${exo.name}" onerror="this.style.display='none'" class="w-10 h-10 rounded-lg object-cover border border-teal-400/40 shrink-0" />
+                            <div class="min-w-0 flex-1">
+                                <div class="text-xs font-bold text-white truncate">${exo.name}</div>
+                                <div class="text-[10px] text-slate-400 truncate">${exo.category}</div>
+                                <div class="text-[9px] font-mono-tech text-sky-300 mt-0.5">Star: ${exo.hostStar.split(' (')[0]} • Year: ${exo.orbitalPeriodLabel.split(' ')[0]}d</div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+        }
+
+        function renderCosmosTabList() {
+            const el = document.getElementById('cosmos-list');
+            if (!el) return;
+            el.innerHTML = DEEP_SPACE_OBJECTS.map(d => `
+                <div onclick="flyToDeepSpace('${d.id}')" class="cursor-pointer p-2.5 rounded-xl bg-slate-900/75 hover:bg-purple-500/15 border border-slate-800 hover:border-purple-400/50 transition-all">
+                    <div class="flex items-center gap-2.5">
+                        <img src="${d.image}" alt="${d.name}" onerror="this.style.display='none'" class="w-10 h-10 rounded-lg object-cover border border-purple-400/40 shrink-0" />
+                        <div class="min-w-0 flex-1">
+                            <div class="text-xs font-bold text-white truncate">${d.name}</div>
+                            <div class="text-[10px] text-slate-400 truncate">${d.category}</div>
+                            <div class="text-[9px] font-mono-tech text-purple-300 mt-0.5">${d.distanceLabel}</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        /*************************************************************************
+         * 8. CAMERA FLIGHT, PLANET/MOON/EXOPLANET INSPECTOR & RAYCASTER
+         *************************************************************************/
+        function animateCameraTo(targetPos, targetLookAt, duration = 1400) {
+            cameraTween = {
+                startPos: camera.position.clone(),
+                endPos: targetPos.clone(),
+                startTarget: controls.target.clone(),
+                endTarget: targetLookAt.clone(),
+                startTime: performance.now(),
+                duration
+            };
+        }
+
+        function setCameraPreset(mode) {
+            lockedCelestialBody = null;
+            toggleISSCockpitLock(false);
+            if (mode === 'exoplanets') {
+                switchSidebarTab('exoplanets');
+                selectExoplanetById(DISCOVERED_EXOPLANETS[0].id);
+                return;
+            }
+            const distMap = { surface: 13.5, orbit: 26, moon: 65, solar: 245, galaxy: 1150 };
+            const d = distMap[mode] || 26;
+            const dir = camera.position.clone().normalize();
+            if (dir.lengthSq() < 0.001) dir.set(0, 0.3, 1).normalize();
+            animateCameraTo(dir.multiplyScalar(d), new THREE.Vector3(0, 0, 0), 1300);
+        }
+
+        function flyToCoordinates(lat, lon, title, category, desc, zoom = 15, isCustomAddress = false) {
+            lockedCelestialBody = null;
+            toggleISSCockpitLock(false);
+            spinSpeedMultiplier = 0;
+            document.getElementById('spin-toggle-btn').textContent = 'SPIN: PAUSED';
+
+            const localPos = latLonToVector3(lat, lon, EARTH_RADIUS * 1.01);
+            if (isCustomAddress) {
+                customAddressBeacon.position.copy(localPos);
+                customAddressBeacon.lookAt(new THREE.Vector3(0, 0, 0));
+                customAddressBeacon.visible = true;
+            }
+
+            const worldPos = localPos.clone().applyMatrix4(earthGroup.matrixWorld);
+            const camPos = worldPos.clone().normalize().multiplyScalar(14.2);
+            animateCameraTo(camPos, new THREE.Vector3(0, 0, 0), 1350);
+
+            const inspector = document.getElementById('location-inspector');
+            inspector.classList.remove('translate-x-[120%]');
+            document.getElementById('insp-planetary-card').classList.add('hidden');
+            document.getElementById('insp-weather-card').classList.remove('hidden');
+
+            document.getElementById('insp-category').textContent = category;
+            document.getElementById('insp-title').textContent = title;
+            document.getElementById('insp-coords').textContent = `${lat.toFixed(4)}° N, ${lon.toFixed(4)}° E`;
+            document.getElementById('insp-desc').textContent = desc;
+
+            document.getElementById('insp-ge-link').href = `https://earth.google.com/web/@${lat},${lon},250a,1200d,35y,0h,45t,0r`;
+            document.getElementById('insp-gmaps-link').href = `https://www.google.com/maps/@?api=1&map_action=map&center=${lat},${lon}&zoom=${zoom}&basemap=satellite`;
+
+            lastInspectedState = { mode: 'earth', lat, lon, zoom, title, photoUrl: '' };
+            refreshEarthSatelliteView(lat, lon, zoom, title);
+            fetchOpenMeteoWeather(lat, lon, true);
+        }
+
+        function selectLocation(locId) {
+            const loc = LOCATIONS.find(l => l.id === locId);
+            if (!loc) return;
+            document.getElementById('insp-metric1-label').textContent = 'Elevation';
+            document.getElementById('insp-elevation').textContent = loc.elevation;
+            document.getElementById('insp-metric2-label').textContent = 'Region';
+            document.getElementById('insp-region').textContent = loc.region;
+            document.getElementById('insp-metric3-label').textContent = 'Solar State';
+            flyToCoordinates(loc.lat, loc.lon, loc.name, loc.category, loc.desc, loc.zoom, false);
+        }
+
+        function selectPlanetById(planetId, moonId = null) {
+            const planet = SOLAR_SYSTEM_BODIES.find(p => p.id === planetId);
+            if (!planet) return;
+            const moon = moonId ? (planet.moons || []).find(m => m.id === moonId) : null;
+            selectPlanetOrMoon(planet, moon);
+        }
+
+        function selectPlanetOrMoon(planet, moon = null) {
+            toggleISSCockpitLock(false);
+            lockedCelestialBody = planet.mesh;
+
+            const worldPos = new THREE.Vector3();
+            planet.mesh.getWorldPosition(worldPos);
+            const offset = new THREE.Vector3(planet.radius * 3.8 + 6, planet.radius * 1.8 + 3, planet.radius * 4.2 + 8);
+            animateCameraTo(worldPos.clone().add(offset), worldPos, 1450);
+
+            const inspector = document.getElementById('location-inspector');
+            inspector.classList.remove('translate-x-[120%]');
+
+            document.getElementById('insp-planetary-card').classList.remove('hidden');
+            document.getElementById('insp-weather-card').classList.add('hidden');
+            document.getElementById('leaflet-map').classList.add('hidden');
+            document.getElementById('insp-earth-links').classList.add('hidden');
+            document.getElementById('insp-img').classList.remove('hidden');
+            document.getElementById('unlock-planet-btn').textContent = 'TRACKING LOCKED ✕';
+
+            const displayTitle = moon ? `${moon.name} (Moon of ${planet.name})` : planet.name;
+            const displayCategory = moon ? `NATURAL SATELLITE • ${planet.name.toUpperCase()}` : planet.category.toUpperCase();
+            const displayImg = moon ? moon.image : planet.image;
+            const displayCredit = moon ? moon.credit : planet.credit;
+            const displayDesc = moon ? moon.desc : planet.description;
+
+            document.getElementById('insp-category').textContent = displayCategory;
+            document.getElementById('insp-title').textContent = displayTitle;
+            document.getElementById('insp-coords').textContent = `Heliocentric: ${planet.distAU} • Ecliptic Lon: ${(planet.currentLonDeg || 0).toFixed(1)}°`;
+
+            document.getElementById('planet-rot-period').textContent = moon ? moon.periodLabel : planet.siderealPeriodLabel;
+            document.getElementById('planet-rot-vel').textContent = `Eq: ${planet.equatorialVelKmh}`;
+            document.getElementById('planet-axial-tilt').textContent = `${planet.axialTiltDeg}° Tilt`;
+            document.getElementById('planet-orbit-period').textContent = `Year: ${planet.orbitalPeriodLabel}`;
+            document.getElementById('planet-moon-count').textContent = planet.moonCountLabel;
+            document.getElementById('planet-gravity').textContent = planet.gravityLabel;
+
+            document.getElementById('planet-active-moon-badge').textContent = moon ? `Viewing: ${moon.name}` : 'Viewing: Primary Planet';
+            const moonsGrid = document.getElementById('planet-moons-grid');
+            if (planet.moons && planet.moons.length > 0) {
+                moonsGrid.innerHTML = `
+                    <button onclick="selectPlanetById('${planet.id}')" class="text-left p-1.5 rounded-lg border ${!moon ? 'bg-orange-500/25 border-orange-400 text-white' : 'bg-slate-950/60 border-slate-800 text-slate-300'} text-[9px] font-mono-tech">
+                        🪐 ${planet.name.split(' ')[0]} (Primary)
+                    </button>
+                    ${planet.moons.map(m => `
+                        <button onclick="selectPlanetById('${planet.id}', '${m.id}')" class="text-left p-1.5 rounded-lg border ${moon && moon.id === m.id ? 'bg-sky-500/25 border-sky-400 text-white' : 'bg-slate-950/60 border-slate-800 text-slate-300'} text-[9px] font-mono-tech truncate">
+                            🌕 ${m.name} (${m.radiusLabel})
+                        </button>
+                    `).join('')}
+                `;
+            } else {
+                moonsGrid.innerHTML = `<div class="col-span-2 text-[9px] font-mono-tech text-slate-500">No natural moons orbit ${planet.name}.</div>`;
+            }
+
+            document.getElementById('insp-metric1-label').textContent = 'Heliocentric';
+            document.getElementById('insp-elevation').textContent = planet.distAU;
+            document.getElementById('insp-metric2-label').textContent = 'Sidereal Spin';
+            document.getElementById('insp-region').textContent = planet.siderealPeriodLabel.split(' ')[0];
+            document.getElementById('insp-metric3-label').textContent = 'Axial Tilt';
+            document.getElementById('insp-solar').textContent = `${planet.axialTiltDeg}°`;
+
+            document.getElementById('insp-desc').textContent = displayDesc;
+            document.getElementById('insp-photo-credit').textContent = displayCredit;
+            document.getElementById('insp-photo-credit').classList.remove('hidden');
+            document.getElementById('insp-zoom-photo-btn').classList.remove('hidden');
+            document.getElementById('insp-map-badge').textContent = `NASA / ESA ARCHIVE: ${displayTitle.split(' ')[0].toUpperCase()}`;
+
+            lastInspectedState = { mode: 'celestial', photoUrl: displayImg };
+            refreshCelestialPhoto(displayImg, `ACQUIRING ${displayTitle.toUpperCase()} IMAGERY...`);
+        }
+
+        function selectExoplanetById(exoId) {
+            const exo = DISCOVERED_EXOPLANETS.find(x => x.id === exoId);
+            if (!exo) return;
+
+            toggleISSCockpitLock(false);
+            lockedCelestialBody = exo.mesh;
+
+            const worldPos = new THREE.Vector3();
+            exo.mesh.getWorldPosition(worldPos);
+            const camOffset = new THREE.Vector3(16, 9, 24);
+            animateCameraTo(worldPos.clone().add(camOffset), worldPos, 1550);
+
+            const inspector = document.getElementById('location-inspector');
+            inspector.classList.remove('translate-x-[120%]');
+
+            document.getElementById('insp-planetary-card').classList.remove('hidden');
+            document.getElementById('insp-weather-card').classList.add('hidden');
+            document.getElementById('leaflet-map').classList.add('hidden');
+            document.getElementById('insp-earth-links').classList.add('hidden');
+            document.getElementById('insp-img').classList.remove('hidden');
+            document.getElementById('unlock-planet-btn').textContent = 'TRACKING LOCKED ✕';
+
+            document.getElementById('insp-category').textContent = `${exo.discoveryBadge} • ${exo.category.toUpperCase()}`;
+            document.getElementById('insp-title').textContent = exo.name;
+            document.getElementById('insp-coords').textContent = `Distance: ${exo.distanceLabel} • Host: ${exo.hostStar}`;
+
+            document.getElementById('planet-rot-period').textContent = exo.siderealPeriodLabel;
+            document.getElementById('planet-rot-vel').textContent = `Eq: ${exo.equatorialVelKmh}`;
+            document.getElementById('planet-axial-tilt').textContent = `${exo.axialTiltDeg}° Tilt`;
+            document.getElementById('planet-orbit-period').textContent = `Year: ${exo.orbitalPeriodLabel}`;
+            document.getElementById('planet-moon-count').textContent = exo.radiusLabel.split(' (')[0];
+            document.getElementById('planet-gravity').textContent = exo.gravityLabel;
+
+            document.getElementById('planet-active-moon-badge').textContent = `Host Star: ${exo.hostStar.split(' (')[0]}`;
+            document.getElementById('planet-moons-grid').innerHTML = `
+                <div class="col-span-2 p-2 rounded-lg bg-teal-950/50 border border-teal-500/30 text-[10px] font-mono-tech text-teal-200">
+                    🔭 <strong>EXOPLANET TELEMETRY:</strong> Radius: ${exo.radiusLabel} • Equilibrium Temp: ${exo.temperature}
+                </div>
+            `;
+
+            document.getElementById('insp-metric1-label').textContent = 'Radius / Mass';
+            document.getElementById('insp-elevation').textContent = exo.radiusLabel;
+            document.getElementById('insp-metric2-label').textContent = 'Host Star';
+            document.getElementById('insp-region').textContent = exo.hostStar;
+            document.getElementById('insp-metric3-label').textContent = 'Thermal Regime';
+            document.getElementById('insp-solar').textContent = exo.temperature;
+
+            document.getElementById('insp-desc').textContent = exo.description;
+            document.getElementById('insp-photo-credit').textContent = exo.credit;
+            document.getElementById('insp-photo-credit').classList.remove('hidden');
+            document.getElementById('insp-zoom-photo-btn').classList.remove('hidden');
+            document.getElementById('insp-map-badge').textContent = `DISCOVERED EXOPLANET: ${exo.name.split(' (')[0].toUpperCase()}`;
+
+            lastInspectedState = { mode: 'celestial', photoUrl: exo.image };
+            refreshCelestialPhoto(exo.image, `ACQUIRING ${exo.name.split(' (')[0].toUpperCase()} JWST/TESS TELEMETRY...`);
+        }
+
+        function flyToDeepSpace(cosmosId) {
+            const item = DEEP_SPACE_OBJECTS.find(d => d.id === cosmosId);
+            if (!item) return;
+
+            toggleISSCockpitLock(false);
+            lockedCelestialBody = item.mesh;
+
+            const worldPos = new THREE.Vector3();
+            item.mesh.getWorldPosition(worldPos);
+            animateCameraTo(worldPos.clone().add(new THREE.Vector3(0, 28, 85)), worldPos, 1500);
+
+            const inspector = document.getElementById('location-inspector');
+            inspector.classList.remove('translate-x-[120%]');
+            document.getElementById('insp-planetary-card').classList.add('hidden');
+            document.getElementById('insp-weather-card').classList.add('hidden');
+            document.getElementById('leaflet-map').classList.add('hidden');
+            document.getElementById('insp-earth-links').classList.add('hidden');
+            document.getElementById('insp-img').classList.remove('hidden');
+
+            document.getElementById('insp-category').textContent = `${item.category.toUpperCase()} • ${item.constellation.toUpperCase()}`;
+            document.getElementById('insp-title').textContent = item.name;
+            document.getElementById('insp-coords').textContent = `Distance: ${item.distanceLabel}`;
+
+            document.getElementById('insp-metric1-label').textContent = 'Distance';
+            document.getElementById('insp-elevation').textContent = item.distanceLabel;
+            document.getElementById('insp-metric2-label').textContent = 'Constellation';
+            document.getElementById('insp-region').textContent = item.constellation;
+            document.getElementById('insp-metric3-label').textContent = 'Class';
+            document.getElementById('insp-solar').textContent = item.category;
+
+            document.getElementById('insp-desc').textContent = item.desc;
+            document.getElementById('insp-photo-credit').textContent = item.credit;
+            document.getElementById('insp-photo-credit').classList.remove('hidden');
+            document.getElementById('insp-zoom-photo-btn').classList.remove('hidden');
+            document.getElementById('insp-map-badge').textContent = `DEEP SPACE OBSERVATORY`;
+
+            lastInspectedState = { mode: 'celestial', photoUrl: item.image };
+            refreshCelestialPhoto(item.image, `SLEWING TELESCOPE TO ${item.name.toUpperCase()}...`);
+        }
+
+        // 3D Raycasting on Click
+        const celestialRaycaster = new THREE.Raycaster();
+        const pointerDownPos = new THREE.Vector2();
+        renderer.domElement.addEventListener('pointerdown', e => {
+            pointerDownPos.set(e.clientX, e.clientY);
+        });
+        renderer.domElement.addEventListener('pointerup', e => {
+            if (Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) > 6) return;
+            const mouse = new THREE.Vector2(
+                (e.clientX / window.innerWidth) * 2 - 1,
+                -(e.clientY / window.innerHeight) * 2 + 1
+            );
+            celestialRaycaster.setFromCamera(mouse, camera);
+            const hits = celestialRaycaster.intersectObjects(clickableCelestialMeshes, false);
+            if (hits.length > 0) {
+                const hitObj = hits[0].object;
+                if (hitObj.userData && hitObj.userData.exoplanetItem) {
+                    selectExoplanetById(hitObj.userData.exoplanetItem.id);
+                    return;
+                }
+                if (hitObj.userData && hitObj.userData.deepSpaceItem) {
+                    flyToDeepSpace(hitObj.userData.deepSpaceItem.id);
+                    return;
+                }
+                if (hitObj.userData && hitObj.userData.celestialItem) {
+                    const planet = hitObj.userData.celestialItem;
+                    const moon = hitObj.userData.moonItem || null;
+                    if (!planet.isEarthReference || moon || camera.position.length() > 32) {
+                        selectPlanetOrMoon(planet, moon);
+                    }
+                }
+            }
+        });
+
+        /*************************************************************************
+         * 9. MULTI-PROVIDER GLOBAL ADDRESS & LOCATION NAME SEARCH + HISTORY
+         *************************************************************************/
+        const addressForm = document.getElementById('global-address-form');
+        const addressInput = document.getElementById('address-search-input');
+        const searchDropdown = document.getElementById('search-results-dropdown');
+        const clearSearchBtn = document.getElementById('clear-search-btn');
+        const searchSpinner = document.getElementById('search-spinner');
+        let autocompleteTimer = null;
+
+        function clearAddressInput() {
+            addressInput.value = '';
+            clearSearchBtn.classList.add('hidden');
+            searchDropdown.classList.add('hidden');
+            addressInput.focus();
+        }
+
+        function clearAllSearchHistory() {
+            sessionSearchedPlaces = [];
+            customAddressBeacon.visible = false;
+            searchDropdown.classList.add('hidden');
+            renderLocationCards();
+        }
+
+        function removeSearchedPlace(index) {
+            sessionSearchedPlaces.splice(index, 1);
+            if (sessionSearchedPlaces.length === 0) customAddressBeacon.visible = false;
+            renderLocationCards();
+        }
+
+        function savePlaceToSessionLandmarks(place) {
+            sessionSearchedPlaces = sessionSearchedPlaces.filter(p => p.title !== place.title);
+            sessionSearchedPlaces.unshift(place);
+            if (sessionSearchedPlaces.length > 10) sessionSearchedPlaces.pop();
+            renderLocationCards();
+        }
+
+        function searchBuiltInLocationsByName(query) {
+            const q = query.toLowerCase().trim();
+            const matches = [];
+
+            // 1. Built-in Earth Landmarks
+            LOCATIONS.forEach(loc => {
+                if (loc.name.toLowerCase().includes(q) || loc.category.toLowerCase().includes(q) || loc.region.toLowerCase().includes(q)) {
+                    matches.push({
+                        kind: 'earth-builtin',
+                        locId: loc.id,
+                        title: loc.name,
+                        display_name: `${loc.name} • ${loc.category} (${loc.region})`,
+                        typeBadge: loc.category
+                    });
+                }
+            });
+
+            // 2. Solar System Planets & Moons
+            SOLAR_SYSTEM_BODIES.forEach(p => {
+                if (p.name.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)) {
+                    matches.push({
+                        kind: 'planet',
+                        planetId: p.id,
+                        title: p.name,
+                        display_name: `${p.name} • ${p.category} (${p.distAU})`,
+                        typeBadge: 'Solar System'
+                    });
+                }
+                (p.moons || []).forEach(m => {
+                    if (m.name.toLowerCase().includes(q)) {
+                        matches.push({
+                            kind: 'moon',
+                            planetId: p.id,
+                            moonId: m.id,
+                            title: `${m.name} (Moon of ${p.name})`,
+                            display_name: `${m.name} • Natural Satellite of ${p.name}`,
+                            typeBadge: 'Lunar Body'
+                        });
+                    }
+                });
+            });
+
+            // 3. Deep-Space Stars, Nebulae & Galaxies
+            DEEP_SPACE_OBJECTS.forEach(d => {
+                if (d.name.toLowerCase().includes(q) || d.category.toLowerCase().includes(q) || d.constellation.toLowerCase().includes(q)) {
+                    matches.push({
+                        kind: 'cosmos',
+                        cosmosId: d.id,
+                        title: d.name,
+                        display_name: `${d.name} • ${d.category} (${d.distanceLabel})`,
+                        typeBadge: 'Deep Cosmos'
+                    });
+                }
+            });
+
+            // 4. Newly Discovered Exoplanets
+            DISCOVERED_EXOPLANETS.forEach(exo => {
+                if (exo.name.toLowerCase().includes(q) ||
+                    exo.category.toLowerCase().includes(q) ||
+                    exo.hostStar.toLowerCase().includes(q) ||
+                    exo.discoveryBadge.toLowerCase().includes(q)) {
+                    matches.push({
+                        kind: 'exoplanet',
+                        exoId: exo.id,
+                        title: exo.name,
+                        display_name: `${exo.name} • ${exo.discoveryBadge} (${exo.distanceLabel})`,
+                        typeBadge: 'New Exoplanet'
+                    });
+                }
+            });
+
+            return matches;
+        }
+
+        async function lookupAllAddresses(query) {
+            const q = query.trim();
+            if (!q) return [];
+
+            // Coordinate check
+            const coordMatch = q.match(/^(-?\d+(\.\d+)?)\s*,\s*(-?\d+(\.\d+)?)$/);
+            if (coordMatch) {
+                const lat = parseFloat(coordMatch[1]);
+                const lon = parseFloat(coordMatch[3]);
+                return [{
+                    kind: 'coords',
+                    lat, lon, zoom: 16,
+                    title: `GPS (${lat.toFixed(4)}, ${lon.toFixed(4)})`,
+                    display_name: `Direct Coordinates: ${lat.toFixed(4)}° N, ${lon.toFixed(4)}° E`,
+                    typeBadge: 'GPS Coordinates'
+                }];
+            }
+
+            const builtInMatches = searchBuiltInLocationsByName(q);
+            const results = [...builtInMatches];
+
+            // Multi-provider parallel geocoding (ArcGIS + Nominatim)
+            const [arcRes, nomRes] = await Promise.allSettled([
+                fetch(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&SingleLine=${encodeURIComponent(q)}&maxLocations=5`).then(r => r.json()),
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5`).then(r => r.json())
+            ]);
+
+            if (arcRes.status === 'fulfilled' && arcRes.value && arcRes.value.candidates) {
+                arcRes.value.candidates.forEach(c => {
+                    results.push({
+                        kind: 'address',
+                        lat: c.location.y,
+                        lon: c.location.x,
+                        zoom: 17,
+                        title: c.address.split(',')[0],
+                        display_name: c.address,
+                        typeBadge: 'Address / Place'
+                    });
+                });
+            }
+
+            if (nomRes.status === 'fulfilled' && Array.isArray(nomRes.value)) {
+                nomRes.value.forEach(n => {
+                    results.push({
+                        kind: 'address',
+                        lat: parseFloat(n.lat),
+                        lon: parseFloat(n.lon),
+                        zoom: 16,
+                        title: n.display_name.split(',')[0],
+                        display_name: n.display_name,
+                        typeBadge: n.type ? n.type.toUpperCase() : 'Location'
+                    });
+                });
+            }
+
+            return results.slice(0, 8);
+        }
+
+        function selectResolvedAddress(place, hideDropdownImmediately = true) {
+            if (hideDropdownImmediately) {
+                if (autocompleteTimer) clearTimeout(autocompleteTimer);
+                searchDropdown.classList.add('hidden');
+                addressInput.blur();
+            }
+
+            if (place.kind === 'earth-builtin') {
+                selectLocation(place.locId);
+                return;
+            }
+            if (place.kind === 'planet') {
+                selectPlanetById(place.planetId);
+                return;
+            }
+            if (place.kind === 'moon') {
+                selectPlanetById(place.planetId, place.moonId);
+                return;
+            }
+            if (place.kind === 'cosmos') {
+                flyToDeepSpace(place.cosmosId);
+                return;
+            }
+            if (place.kind === 'exoplanet') {
+                selectExoplanetById(place.exoId);
+                return;
+            }
+
+            savePlaceToSessionLandmarks(place);
+            document.getElementById('insp-metric1-label').textContent = 'Latitude';
+            document.getElementById('insp-elevation').textContent = `${place.lat.toFixed(4)}°`;
+            document.getElementById('insp-metric2-label').textContent = 'Longitude';
+            document.getElementById('insp-region').textContent = `${place.lon.toFixed(4)}°`;
+            document.getElementById('insp-metric3-label').textContent = 'Solar State';
+
+            flyToCoordinates(place.lat, place.lon, place.title, place.typeBadge || 'GEOCODED LOCATION', place.display_name, place.zoom || 17, true);
+        }
+
+        function renderSearchDropdown(items) {
+            if (!items || items.length === 0) {
+                searchDropdown.classList.add('hidden');
+                return;
+            }
+            searchDropdown.innerHTML = items.map((item, idx) => `
+                <button type="button" data-idx="${idx}" class="search-item-btn w-full text-left px-3 py-2 hover:bg-sky-500/20 text-xs text-slate-200 flex items-center justify-between gap-2 transition">
+                    <div class="min-w-0 flex-1">
+                        <div class="font-bold text-white truncate">${item.title}</div>
+                        <div class="text-[10px] text-slate-400 truncate">${item.display_name}</div>
+                    </div>
+                    <span class="text-[9px] font-mono-tech px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 shrink-0">${item.typeBadge || 'FLY →'}</span>
+                </button>
+            `).join('');
+
+            searchDropdown.querySelectorAll('.search-item-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const chosen = items[parseInt(btn.getAttribute('data-idx'), 10)];
+                    if (chosen) selectResolvedAddress(chosen, true);
+                };
+            });
+            searchDropdown.classList.remove('hidden');
+        }
+
+        addressInput.addEventListener('input', () => {
+            const val = addressInput.value.trim();
+            clearSearchBtn.classList.toggle('hidden', val.length === 0);
+            if (autocompleteTimer) clearTimeout(autocompleteTimer);
+            if (val.length < 2) {
+                searchDropdown.classList.add('hidden');
+                return;
+            }
+            autocompleteTimer = setTimeout(async () => {
+                const items = await lookupAllAddresses(val);
+                if (document.activeElement === addressInput) {
+                    renderSearchDropdown(items);
+                }
+            }, 260);
+        });
+
+        addressForm.addEventListener('submit', async e => {
+            e.preventDefault();
+            if (autocompleteTimer) clearTimeout(autocompleteTimer);
+            searchDropdown.classList.add('hidden');
+            addressInput.blur();
+
+            const q = addressInput.value.trim();
+            if (!q) return;
+
+            searchSpinner.classList.remove('hidden');
+            const results = await lookupAllAddresses(q);
+            searchSpinner.classList.add('hidden');
+
+            if (results.length > 0) {
+                selectResolvedAddress(results[0], true);
+            }
+        });
+
+        /*************************************************************************
+         * 10. KEPLERIAN EPHEMERIS DATE ENGINE, ROTATION MODES & CLOCKS
+         *************************************************************************/
+        let currentEphemerisDate = new Date();
+        let ephemerisLiveMode = true;
+        const dateInputEl = document.getElementById('ephemeris-date-input');
+
+        function formatDateISO(d) {
+            return d.toISOString().slice(0, 10);
+        }
+        dateInputEl.value = formatDateISO(currentEphemerisDate);
+
+        function updatePlanetaryEphemerisPositions(dateObj) {
+            const j2000 = Date.UTC(2000, 0, 1, 12, 0, 0);
+            const dDays = (dateObj.getTime() - j2000) / 86400000;
+
+            SOLAR_SYSTEM_BODIES.forEach(body => {
+                if (body.orbitRadius === 0) {
+                    body.holder.position.set(0, 0, 0);
+                    return;
+                }
+                const meanLon = (body.L0 + body.n * dDays) % 360;
+                const M = THREE.MathUtils.degToRad(meanLon);
+                const trueLonRad = M + 2 * body.e * Math.sin(M);
+                body.currentLonDeg = ((THREE.MathUtils.radToDeg(trueLonRad) % 360) + 360) % 360;
+
+                body.holder.position.set(
+                    Math.cos(trueLonRad) * body.orbitRadius,
+                    0,
+                    Math.sin(trueLonRad) * body.orbitRadius
+                );
+            });
+
+            // Update Astronomical Solar Direction on Earth
+            const hours = dateObj.getUTCHours() + dateObj.getUTCMinutes() / 60;
+            const gha = (hours - 12) * 15 * (Math.PI / 180);
+            const dayOfYear = Math.floor((dateObj - new Date(Date.UTC(dateObj.getUTCFullYear(), 0, 0))) / 86400000);
+            const decl = THREE.MathUtils.degToRad(23.44 * Math.sin(((2 * Math.PI) / 365) * (dayOfYear - 81)));
+            sunDirection.set(Math.cos(gha), Math.sin(decl), Math.sin(gha)).normalize();
+            earthUniforms.sunDir.value.copy(sunDirection);
+        }
+
+        function applyEphemerisDateString(dateStr) {
+            const parsed = new Date(dateStr + 'T12:00:00Z');
+            if (isNaN(parsed.getTime())) return;
+            ephemerisLiveMode = false;
+            currentEphemerisDate = parsed;
+            dateInputEl.value = dateStr;
+            document.getElementById('ephemeris-status-label').textContent = `DATE: ${dateStr}`;
+            updatePlanetaryEphemerisPositions(currentEphemerisDate);
+            renderPlanetsTabList();
+        }
+
+        dateInputEl.addEventListener('change', () => {
+            if (dateInputEl.value) applyEphemerisDateString(dateInputEl.value);
+        });
+
+        function stepEphemerisDays(deltaDays) {
+            ephemerisLiveMode = false;
+            currentEphemerisDate = new Date(currentEphemerisDate.getTime() + deltaDays * 86400000);
+            const iso = formatDateISO(currentEphemerisDate);
+            dateInputEl.value = iso;
+            document.getElementById('ephemeris-status-label').textContent = `DATE: ${iso}`;
+            updatePlanetaryEphemerisPositions(currentEphemerisDate);
+            renderPlanetsTabList();
+        }
+
+        function syncEphemerisToNow() {
+            ephemerisLiveMode = true;
+            currentEphemerisDate = new Date();
+            dateInputEl.value = formatDateISO(currentEphemerisDate);
+            document.getElementById('ephemeris-status-label').textContent = 'LIVE REAL-TIME';
+            updatePlanetaryEphemerisPositions(currentEphemerisDate);
+            renderPlanetsTabList();
+        }
+
+        function toggleRealTimeRotationMode() {
+            realTimeRotationMode = !realTimeRotationMode;
+            const btn = document.getElementById('realtime-rot-btn');
+            if (realTimeRotationMode) {
+                btn.textContent = 'REAL-TIME 1:1 SIDEREAL';
+                btn.className = 'px-2.5 py-1.5 rounded-xl text-[10px] font-mono-tech uppercase bg-emerald-500/25 text-emerald-200 border border-emerald-400/50 transition';
+            } else {
+                btn.textContent = 'TIME-LAPSE ORRERY';
+                btn.className = 'px-2.5 py-1.5 rounded-xl text-[10px] font-mono-tech uppercase bg-amber-500/20 text-amber-300 border border-amber-400/35 hover:bg-amber-500/35 transition';
+            }
+        }
+
+        function toggleSpin() {
+            spinSpeedMultiplier = spinSpeedMultiplier > 0 ? 0 : 0.5;
+            document.getElementById('spin-toggle-btn').textContent = spinSpeedMultiplier > 0 ? 'SPIN: ON' : 'SPIN: PAUSED';
+        }
+
+        function toggleBloomPass() {
+            bloomEnabled = !bloomEnabled;
+            const btn = document.getElementById('bloom-toggle-btn');
+            btn.style.opacity = bloomEnabled ? '1' : '0.45';
+        }
+
+        // Continuous Zoom Slider
+        const zoomSlider = document.getElementById('zoom-slider');
+        zoomSlider.addEventListener('input', () => {
+            lockedCelestialBody = null;
+            toggleISSCockpitLock(false);
+            const t = parseFloat(zoomSlider.value) / 1000;
+            const minD = 11.2;
+            const maxD = 2200;
+            const dist = minD * Math.pow(maxD / minD, t);
+            camera.position.normalize().multiplyScalar(dist);
+        });
+
+        // Live Clocks & 60s Weather Auto-Refresh
+        function updateRealTimeClocksAndCountdowns(tickSecond = true) {
+            const now = new Date();
+            document.getElementById('hud-live-clock').textContent = now.toLocaleTimeString([], { hour12: false }) + ' LOCAL';
+            document.getElementById('hud-utc-clock').textContent = now.toISOString().slice(11, 19) + ' UTC';
+
+            try {
+                const targetStr = now.toLocaleTimeString('en-US', { timeZone: activeTargetTimezone, hour12: true, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                document.getElementById('target-local-clock').textContent = targetStr;
+            } catch (e) {
+                document.getElementById('target-local-clock').textContent = now.toISOString().slice(11, 19) + ' UTC';
+            }
+
+            if (tickSecond) {
+                weatherSecondsRemaining--;
+                if (weatherSecondsRemaining <= 0) {
+                    weatherSecondsRemaining = 60;
+                    if (lastInspectedState.mode === 'earth') {
+                        fetchOpenMeteoWeather(lastInspectedState.lat, lastInspectedState.lon, false);
+                    }
+                }
+                const cd = document.getElementById('weather-countdown-badge');
+                if (cd) cd.textContent = `AUTO ${weatherSecondsRemaining}s`;
+            }
+        }
+        setInterval(() => updateRealTimeClocksAndCountdowns(true), 1000);
+
+        /*************************************************************************
+         * 11. 3D LABEL PROJECTION, ANIMATION LOOP & WINDOW RESIZE
+         *************************************************************************/
+        const tempVec = new THREE.Vector3();
+
+        function updateProjectedLabels() {
+            const dist = camera.position.length();
+
+            // Earth Landmark Labels
+            LOCATIONS.forEach(loc => {
+                if (!loc.labelEl) return;
+                if (!showPins || dist > 55 || issState.cockpitLocked) {
+                    loc.labelEl.style.opacity = '0';
+                    loc.labelEl.style.pointerEvents = 'none';
+                    return;
+                }
+                loc.mesh.getWorldPosition(tempVec);
+                const camToPin = tempVec.clone().sub(camera.position).normalize();
+                const pinNormal = tempVec.clone().normalize();
+                if (camToPin.dot(pinNormal) > 0.15) {
+                    loc.labelEl.style.opacity = '0';
+                    loc.labelEl.style.pointerEvents = 'none';
+                    return;
+                }
+                tempVec.project(camera);
+                if (tempVec.z < 1.0) {
+                    const x = (tempVec.x * 0.5 + 0.5) * window.innerWidth;
+                    const y = (-(tempVec.y * 0.5) + 0.5) * window.innerHeight;
+                    loc.labelEl.style.left = `${x}px`;
+                    loc.labelEl.style.top = `${y}px`;
+                    loc.labelEl.style.opacity = '1';
+                    loc.labelEl.style.pointerEvents = 'auto';
+                }
+            });
+
+            // Solar System Planet Labels
+            SOLAR_SYSTEM_BODIES.forEach(body => {
+                if (!body.labelEl) return;
+                if (!showPins || dist < 42 || dist > 620 || issState.cockpitLocked) {
+                    body.labelEl.style.opacity = '0';
+                    body.labelEl.style.pointerEvents = 'none';
+                    return;
+                }
+                body.mesh.getWorldPosition(tempVec);
+                tempVec.project(camera);
+                if (tempVec.z < 1.0) {
+                    const x = (tempVec.x * 0.5 + 0.5) * window.innerWidth;
+                    const y = (-(tempVec.y * 0.5) + 0.5) * window.innerHeight;
+                    body.labelEl.style.left = `${x}px`;
+                    body.labelEl.style.top = `${y}px`;
+                    body.labelEl.style.opacity = '1';
+                    body.labelEl.style.pointerEvents = 'auto';
+                } else {
+                    body.labelEl.style.opacity = '0';
+                    body.labelEl.style.pointerEvents = 'none';
+                }
+            });
+
+            // Deep-Space Stars, Nebulae & Galaxies Labels
+            DEEP_SPACE_OBJECTS.forEach(item => {
+                if (!item.labelEl) return;
+                if (!showPins || dist < 240 || issState.cockpitLocked) {
+                    item.labelEl.style.opacity = '0';
+                    item.labelEl.style.pointerEvents = 'none';
+                    return;
+                }
+                item.mesh.getWorldPosition(tempVec);
+                tempVec.project(camera);
+                if (tempVec.z < 1.0) {
+                    const x = (tempVec.x * 0.5 + 0.5) * window.innerWidth;
+                    const y = (-(tempVec.y * 0.5) + 0.5) * window.innerHeight;
+                    item.labelEl.style.left = `${x}px`;
+                    item.labelEl.style.top = `${y}px`;
+                    item.labelEl.style.opacity = '1';
+                    item.labelEl.style.pointerEvents = 'auto';
+                } else {
+                    item.labelEl.style.opacity = '0';
+                    item.labelEl.style.pointerEvents = 'none';
+                }
+            });
+
+            // Newly Discovered Exoplanets 3D Labels
+            exoplanetObjects.forEach(exo => {
+                if (!exo.labelEl) return;
+                if (!showPins || dist < 95 || issState.cockpitLocked) {
+                    exo.labelEl.style.opacity = '0';
+                    exo.labelEl.style.pointerEvents = 'none';
+                    return;
+                }
+                exo.mesh.getWorldPosition(tempVec);
+                tempVec.project(camera);
+                if (tempVec.z < 1.0) {
+                    const x = (tempVec.x * 0.5 + 0.5) * window.innerWidth;
+                    const y = (-(tempVec.y * 0.5) + 0.5) * window.innerHeight;
+                    exo.labelEl.style.left = `${x}px`;
+                    exo.labelEl.style.top = `${y}px`;
+                    exo.labelEl.style.opacity = '1';
+                    exo.labelEl.style.pointerEvents = 'auto';
+                } else {
+                    exo.labelEl.style.opacity = '0';
+                    exo.labelEl.style.pointerEvents = 'none';
+                }
+            });
+        }
+
+        window.addEventListener('resize', () => {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+            composer.setSize(w, h);
+            bloomPass.resolution.set(w, h);
+        });
+
+        let lastFrameTime = performance.now();
+
+        function animate(nowMs) {
+            requestAnimationFrame(animate);
+            const dt = Math.min(0.1, (nowMs - lastFrameTime) / 1000);
+            lastFrameTime = nowMs;
+
+            if (ephemerisLiveMode) {
+                currentEphemerisDate = new Date();
+                updatePlanetaryEphemerisPositions(currentEphemerisDate);
+            }
+
+            if (lockedCelestialBody) {
+                lockedCelestialBody.getWorldPosition(lockedBeforePos);
+            }
+
+            // 1. Primary Earth Globe Rotation
+            const earthOmega = (2 * Math.PI) / 86164;
+            if (!issState.cockpitLocked) {
+                earthGroup.rotation.y += realTimeRotationMode ? (earthOmega * dt) : (dt * 0.14 * spinSpeedMultiplier);
+            }
+
+            // 2. Solar System Planets & Moons Rotation
+            SOLAR_SYSTEM_BODIES.forEach(body => {
+                const siderealSec = body.siderealHours * 3600;
+                const dTheta = realTimeRotationMode
+                    ? ((2 * Math.PI) / siderealSec) * dt
+                    : ((24 / body.siderealHours) * dt * 0.55 * Math.max(0.2, spinSpeedMultiplier));
+                body.mesh.rotation.y += dTheta;
+
+                if (body.moonMeshes) {
+                    body.moonMeshes.forEach(m => {
+                        const dMoon = realTimeRotationMode ? (dt * 0.0002) : (dt * m.data.speed * 0.65);
+                        m.phase += dMoon;
+                        m.mesh.position.set(Math.cos(m.phase) * m.data.dist, 0, Math.sin(m.phase) * m.data.dist);
+                        m.mesh.rotation.y += dMoon;
+                    });
+                }
+            });
+
+            // 2B. Spin & Orbit Newly Discovered Exoplanets around their Host Stars
+            exoplanetObjects.forEach(exo => {
+                const spinDelta = realTimeRotationMode ? (dt * 0.0002) : (dt * 0.55 * Math.max(0.25, spinSpeedMultiplier));
+                const orbitDelta = realTimeRotationMode ? (dt * 0.00005) : (dt * 0.28 * Math.max(0.2, spinSpeedMultiplier));
+                exo.mesh.rotation.y += spinDelta;
+                exo.orbitPhase += orbitDelta;
+                exo.mesh.position.set(
+                    Math.cos(exo.orbitPhase) * 11.8,
+                    Math.sin(exo.orbitPhase) * 4.5,
+                    Math.sin(exo.orbitPhase) * 11.8
+                );
+            });
+
+            if (lockedCelestialBody && lockedBeforePos && !cameraTween) {
+                const afterPos = new THREE.Vector3();
+                lockedCelestialBody.getWorldPosition(afterPos);
+                const deltaMove = afterPos.clone().sub(lockedBeforePos);
+                camera.position.add(deltaMove);
+                controls.target.copy(afterPos);
+            }
+
+            // 3. 144 Starlink + GPS Satellite Swarm
+            const elapsedSec = nowMs * 0.001;
+            swarmSatellites.forEach(sat => {
+                const angle = sat.phase + elapsedSec * sat.speed * 18;
+                const x = sat.radius * (Math.cos(sat.raan) * Math.cos(angle) - Math.sin(sat.raan) * Math.sin(angle) * Math.cos(sat.inclination));
+                const y = sat.radius * (Math.sin(angle) * Math.sin(sat.inclination));
+                const z = sat.radius * (Math.sin(sat.raan) * Math.cos(angle) + Math.cos(sat.raan) * Math.sin(angle) * Math.cos(sat.inclination));
+                sat.mesh.position.set(x, y, z);
+            });
+
+            // 4. Camera Tween Interpolation
+            if (cameraTween) {
+                const progress = Math.min(1, (nowMs - cameraTween.startTime) / cameraTween.duration);
+                const ease = 1 - Math.pow(1 - progress, 3);
+                camera.position.lerpVectors(cameraTween.startPos, cameraTween.endPos, ease);
+                controls.target.lerpVectors(cameraTween.startTarget, cameraTween.endTarget, ease);
+                if (progress >= 1) cameraTween = null;
+            }
+
+            // 5. ISS Cockpit Lock
+            if (issState.cockpitLocked) {
+                const issWorld = new THREE.Vector3();
+                issGroup.getWorldPosition(issWorld);
+                camera.position.lerp(issWorld.clone().normalize().multiplyScalar(EARTH_RADIUS * 1.15), 0.08);
+                controls.target.set(0, 0, 0);
+            }
+
+            // 6. Scale Readout
+            const dist = camera.position.length();
+            const badge = document.getElementById('regime-badge');
+            const altReadout = document.getElementById('altitude-readout');
+            if (dist < 42) {
+                const altKm = Math.max(120, Math.round((dist - EARTH_RADIUS) * 637));
+                badge.textContent = 'PLANETARY ORBIT';
+                altReadout.textContent = `ALT: ${altKm.toLocaleString()} KM`;
+            } else if (dist < 320) {
+                badge.textContent = 'SOLAR SYSTEM';
+                altReadout.textContent = `HELIOCENTRIC: ${(dist / 50).toFixed(2)} AU`;
+            } else {
+                badge.textContent = 'MILKY WAY & EXOPLANETS';
+                altReadout.textContent = `SCALE: ${(dist * 24).toLocaleString()} LY`;
+            }
+
+            galaxyPoints.rotation.y += realTimeRotationMode ? 0 : (dt * 0.008);
+            controls.update();
+            updateProjectedLabels();
+
+            if (bloomEnabled) {
+                composer.render();
+            } else {
+                renderer.render(scene, camera);
+            }
+        }
+
+        window.onload = function () {
+            renderLocationCards();
+            renderPlanetsTabList();
+            renderExoplanetsTabList();
+            renderCosmosTabList();
+            updateRealTimeClocksAndCountdowns(false);
+            fetchOpenMeteoWeather(lastInspectedState.lat, lastInspectedState.lon, true);
+            animate(performance.now());
+        };
+    </script>
+</body>
+</html>
